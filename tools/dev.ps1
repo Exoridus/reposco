@@ -5,6 +5,7 @@ param(
     [string]$QtRoot = $env:REPOSCO_QT_ROOT,
     [string]$TestFilter = '.',
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Debug',
+    [ValidateRange(0, 1024)][int]$BuildJobs = 0,
     [switch]$UseSccache
 )
 $ErrorActionPreference = 'Stop'
@@ -48,7 +49,16 @@ $env:QT_PLUGIN_PATH = "$QtRoot/plugins"
 $env:QML_IMPORT_PATH = "$QtRoot/qml"
 $env:REPOSCO_QT_ROOT = $QtRoot
 
+function Get-BuildJobs {
+    if ($BuildJobs -gt 0) { return $BuildJobs }
+    $availableProcessors = [Environment]::ProcessorCount
+    if ($env:CI -eq 'true' -or $env:GITHUB_ACTIONS -eq 'true') { return $availableProcessors }
+    return [Math]::Max(1, [int][Math]::Floor($availableProcessors / 2.0))
+}
+
 function Build-Preset([string]$Preset) {
+    $effectiveBuildJobs = Get-BuildJobs
+    Write-Host "Build parallelism: $effectiveBuildJobs jobs ($([Environment]::ProcessorCount) logical processors available)"
     $oldLocale = $env:LC_ALL
     try {
         # Strawberry Perl does not accept Unix UTF-8 locale names on Windows.
@@ -57,7 +67,7 @@ function Build-Preset([string]$Preset) {
         $configureArgs += "-DREPOSCO_USE_SCCACHE=$($UseSccache.IsPresent.ToString().ToUpperInvariant())"
         Invoke-Checked cmake $configureArgs
         $clock = [Diagnostics.Stopwatch]::StartNew()
-        Invoke-Checked cmake @('--build', '--preset', $Preset, '--parallel')
+        Invoke-Checked cmake @('--build', '--preset', $Preset, '--parallel', $effectiveBuildJobs.ToString())
         Write-Host "$Preset build seconds: $($clock.Elapsed.TotalSeconds.ToString('F2'))"
         if ($env:GITHUB_STEP_SUMMARY) { "$Preset compile seconds: $($clock.Elapsed.TotalSeconds.ToString('F2'))" >> $env:GITHUB_STEP_SUMMARY }
         if ($UseSccache) { Invoke-Checked sccache @('--show-stats') }
@@ -78,7 +88,7 @@ switch ($Command) {
     'full' {
         & "$PSScriptRoot/quality.ps1" -Mode Fast -QtRoot $QtRoot
         Build-Preset windows-debug
-        Invoke-Checked cmake @('--build', '--preset', 'windows-debug', '--target', 'all_qmllint')
+        Invoke-Checked cmake @('--build', '--preset', 'windows-debug', '--target', 'all_qmllint', '--parallel', (Get-BuildJobs).ToString())
         Invoke-Checked ctest @('--preset', 'windows-debug')
         & "$PSScriptRoot/quality.ps1" -Mode Analysis -QtRoot $QtRoot
         Build-Preset windows-release
