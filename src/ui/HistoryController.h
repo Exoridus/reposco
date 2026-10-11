@@ -22,6 +22,7 @@ class HistoryController final : public QObject {
     Q_PROPERTY(int retentionDays READ retentionDays NOTIFY stateChanged)
     Q_PROPERTY(bool available READ available NOTIFY stateChanged)
     Q_PROPERTY(bool captureActive READ captureActive NOTIFY stateChanged)
+    Q_PROPERTY(bool policyPending READ policyPending NOTIFY stateChanged)
     Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
     Q_PROPERTY(QString status READ status NOTIFY stateChanged)
     Q_PROPERTY(bool excludeSixDigitCodes READ excludeSixDigitCodes NOTIFY stateChanged)
@@ -35,6 +36,7 @@ class HistoryController final : public QObject {
     [[nodiscard]] QAbstractListModel* model();
     [[nodiscard]] bool available() const;
     [[nodiscard]] bool captureActive() const;
+    [[nodiscard]] bool policyPending() const;
     [[nodiscard]] bool locked() const;
     [[nodiscard]] const QString& status() const;
     Q_INVOKABLE void setCaptureActive(bool active);
@@ -71,7 +73,8 @@ class HistoryController final : public QObject {
     void recordRequested(QString text, quint64 token, quint64 generation);
     void preferenceRequested(bool active);
     void closeRequested();
-    void policyRequested(bool sixDigits, bool eightDigits, QStringList applications);
+    void policyRequested(bool sixDigits, bool eightDigits, QStringList applications,
+                         quint64 generation);
     void clearRequested();
     void retentionRequested(int days);
 
@@ -100,6 +103,9 @@ class HistoryController final : public QObject {
     bool six_digits_ = true;
     bool eight_digits_ = false;
     bool clearing_ = false;
+    bool policy_pending_ = false;
+    bool resume_after_policy_ = false;
+    quint64 policy_generation_ = 0;
     QStringList applications_;
     QString directory_;
     std::unique_ptr<ClipboardMonitor> monitor_;

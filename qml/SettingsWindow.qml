@@ -81,7 +81,7 @@ Window {
                 wrapMode: Text.WordWrap
             }
             ActionButton {
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 objectName: "captureToggle"
                 text: root.historyController && root.historyController.captureActive ? qsTr("Pause capture") : qsTr("Enable / resume capture")
                 tokens: root.tokens
@@ -94,7 +94,7 @@ Window {
             PolicySwitch {
                 Layout.fillWidth: true
                 checked: root.historyController ? root.historyController.excludeSixDigitCodes : true
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 text: qsTr("Ignore standalone six-digit codes (recommended)")
                 tokens: root.tokens
 
@@ -111,7 +111,7 @@ Window {
             PolicySwitch {
                 Layout.fillWidth: true
                 checked: root.historyController !== null && root.historyController.excludeEightDigitCodes
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 text: qsTr("Also ignore standalone eight-digit codes")
                 tokens: root.tokens
 
@@ -164,14 +164,14 @@ Window {
                 }
             }
             ActionButton {
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 text: qsTr("Save application rules")
                 tokens: root.tokens
 
                 onClicked: {
                     const rules = paths.text.split(/\r?\n/).map(value => value.trim()).filter(value => value.length > 0);
                     const saved = root.historyController.setCapturePolicy(root.historyController.excludeSixDigitCodes, root.historyController.excludeEightDigitCodes, rules);
-                    root.ruleStatus = saved ? qsTr("Rules saved.") : qsTr("Use at most 32 absolute .exe paths, each no longer than 512 characters.");
+                    root.ruleStatus = saved ? "" : qsTr("Use at most 32 absolute .exe paths, each no longer than 512 characters.");
                 }
             }
             Text {
@@ -212,7 +212,7 @@ Window {
                 Layout.fillWidth: true
                 color: root.tokens.secondary
                 font.pixelSize: 12
-                text: qsTr("Win+Alt+V opens History. Esc closes it. The palette currently supports viewing and search; paste/replay is not implemented. Appearance choices apply to this session. The surface uses a dependable solid glass-style fallback.")
+                text: qsTr("Win+Alt+V opens History. Esc closes it. Enter pastes original text, Shift+Enter pastes plain text, and Ctrl+Enter copies only. Appearance choices apply to this session. The surface uses a dependable solid glass-style fallback.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }
@@ -289,7 +289,7 @@ Window {
                 }
             }
             ActionButton {
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 text: qsTr("Apply %1 days and remove older entries").arg(root.pendingRetentionDays)
                 tokens: root.tokens
 
@@ -297,7 +297,7 @@ Window {
             }
             ActionButton {
                 destructive: true
-                enabled: root.historyController !== null && root.historyController.available
+                enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                 text: qsTr("Clear history...")
                 tokens: root.tokens
 
@@ -335,7 +335,7 @@ Window {
                         }
                         ActionButton {
                             destructive: true
-                            enabled: root.historyController !== null && root.historyController.available
+                            enabled: root.historyController !== null && root.historyController.available && !root.historyController.policyPending
                             text: qsTr("Delete all history")
                             tokens: root.tokens
 

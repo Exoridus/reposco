@@ -72,8 +72,9 @@ void HistoryWorker::record(const QString& text, quint64 token, quint64 generatio
     try {
         if (store_ && gate_->permits(generation)) {
             const auto normalized = normalizeText(text, six_digits_, eight_digits_);
-            if (normalized && gate_->permits(generation)) {
-                store_->record(*normalized, QDateTime::currentMSecsSinceEpoch());
+            if (normalized &&
+                store_->record(*normalized, QDateTime::currentMSecsSinceEpoch(),
+                               [this, generation] { return gate_->permits(generation); })) {
                 emit changed(store_->summaries());
             }
         }
@@ -92,7 +93,8 @@ void HistoryWorker::setPreference(bool active) {
         failClosed();
     }
 }
-void HistoryWorker::setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications) {
+void HistoryWorker::setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications,
+                              quint64 generation) {
     if (!preferences_ || !store_) {
         return;
     }
@@ -104,7 +106,9 @@ void HistoryWorker::setPolicy(bool sixDigits, bool eightDigits, const QStringLis
     preferences_->sync();
     if (preferences_->status() != QSettings::NoError) {
         failClosed();
+        return;
     }
+    emit policyApplied(generation, sixDigits, eightDigits, applications);
 }
 void HistoryWorker::setRetentionDays(int days) {
     try {

@@ -26,7 +26,8 @@ class HistoryWorker final : public QObject {
     void initialize();
     void record(const QString& text, quint64 token, quint64 generation);
     void setPreference(bool active);
-    void setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications);
+    void setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications,
+                   quint64 generation = 0);
     void clear();
     void setRetentionDays(int days);
     void search(const QString& query, quint64 revision);
@@ -41,6 +42,8 @@ class HistoryWorker final : public QObject {
     void locked();
     void closed();
     void cleared();
+    void policyApplied(quint64 generation, bool sixDigits, bool eightDigits,
+                       QStringList applications);
     void searchReady(reposco::HistorySummaries rows, quint64 revision);
     void previewReady(QString text, quint64 revision);
     void replayReady(QString text, quint64 revision);

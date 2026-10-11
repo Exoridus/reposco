@@ -191,7 +191,7 @@ than the 8192-character preview, clear cancellation, unsupported writes and one
 outstanding replay read after cancellation. A failing queue regression led to a
 separate storage-pending flag. Delayed replay completion must not reclaim focus
 from another window. Policy changes invalidate queued work; an already-started
-storage transaction may still finish, as documented in Privacy.
+storage transaction could still finish in that milestone. The current policy synchronization supersedes that contract: privacy changes stay pending with capture paused until the worker confirms durable settings and completion of earlier operations. Capture admission is rechecked before COMMIT, with transactional rollback of payload, dedup and eviction. A COMMIT already admitted may finish before acknowledgement; no obsolete write can finish after the new policy is confirmed effective. The policy acknowledgement and canceled-transaction regressions were observed failing before their fixes.
 
 Active isolated Windows tests remain enabled in CI; local CreateWindowStation
 is denied with error 5. Coordinated interactive tests are explicit opt-in, not

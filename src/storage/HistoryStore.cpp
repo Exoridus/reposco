@@ -124,10 +124,17 @@ HistoryStore::HistoryStore(const std::string& path, std::span<const unsigned cha
     }
 }
 void HistoryStore::record(const TextContent& text, std::int64_t copiedAt) {
+    (void)record(text, copiedAt, [] { return true; });
+}
+bool HistoryStore::record(const TextContent& text, std::int64_t copiedAt,
+                          const std::function<bool()>& mayCommit) {
     if (text.original.isEmpty() || text.original.size() > static_cast<qsizetype>(kMaxTextBytes) ||
         text.canonical.isEmpty() || text.canonical.size() > static_cast<qsizetype>(kMaxTextBytes) ||
         text.fingerprint.size() != 32 || copiedAt < 0) {
         throw std::invalid_argument("History text does not meet the bounded content contract");
+    }
+    if (!mayCommit()) {
+        return false;
     }
     Transaction transaction(database_);
     auto* database = database_.database_.get();
@@ -162,7 +169,11 @@ void HistoryStore::record(const TextContent& text, std::int64_t copiedAt) {
         (void)write.next();
     }
     evict(database, limits_, copiedAt);
+    if (!mayCommit()) {
+        return false;
+    }
     transaction.commit();
+    return true;
 }
 void HistoryStore::prune(std::int64_t now) {
     if (now < 0) {

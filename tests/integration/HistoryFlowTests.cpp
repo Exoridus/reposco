@@ -43,6 +43,44 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
 class HistoryFlowTests : public QObject {
     Q_OBJECT
   private slots:
+    void clearDuringPolicyChangeKeepsNewRulesAndStaysPaused() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        QVERIFY(controller.setCapturePolicy(false, true, {}));
+        controller.clearHistory(true);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        QVERIFY(!controller.captureActive());
+        QVERIFY(!controller.excludeSixDigitCodes());
+        QVERIFY(controller.excludeEightDigitCodes());
+        controller.shutdown();
+    }
+    void policyIsNotEffectiveUntilStorageAcknowledges() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        QVERIFY(controller.setCapturePolicy(false, true, {}));
+        QVERIFY(!controller.captureActive());
+        QVERIFY(!source->active);
+        QVERIFY(controller.excludeSixDigitCodes());
+        QVERIFY(!controller.setCapturePolicy(true, false, {}));
+        controller.setCaptureActive(true);
+        QVERIFY(!controller.captureActive());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.captureActive(), 5000);
+        QVERIFY(!controller.excludeSixDigitCodes());
+        QVERIFY(controller.excludeEightDigitCodes());
+        emit source->captured("12345678", 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 1, 5000);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        controller.shutdown();
+    }
     void replayUsesFullOriginalAndClearCancelsPendingReply() {
         QTemporaryDir directory;
         auto monitor = std::make_unique<SyntheticMonitor>();
@@ -123,7 +161,7 @@ class HistoryFlowTests : public QObject {
         controller.setCaptureActive(true);
         const auto obsoleteGeneration = source->generation;
         QVERIFY(controller.setCapturePolicy(true, true, {"C:/Synthetic/Vault.exe"}));
-        QVERIFY(controller.captureActive());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.captureActive(), 5000);
         QVERIFY(source->generation != obsoleteGeneration);
         emit source->captured("obsolete policy event", 1, obsoleteGeneration);
         QCOMPARE(source->acknowledgements, 1);
@@ -199,6 +237,7 @@ class HistoryFlowTests : public QObject {
             QCOMPARE(rows[2].excerpt, QString("12345"));
         }
         QVERIFY(controller.setCapturePolicy(false, true, {"C:/Synthetic/Vault.exe"}));
+        QTRY_VERIFY_WITH_TIMEOUT(controller.captureActive(), 5000);
         emit source->captured("123456", token, source->generation);
         QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, static_cast<int>(token), 5000);
         QCOMPARE(controller.model()->rowCount(), 4);

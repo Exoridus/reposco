@@ -4,6 +4,7 @@
 #include "core/TextContent.h"
 
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 namespace reposco {
@@ -23,6 +24,9 @@ class HistoryStore final {
     HistoryStore(const std::string& path, std::span<const unsigned char> key,
                  const HistoryLimits& limits = {});
     void record(const TextContent& text, std::int64_t copiedAt);
+    // Rechecks admission before commit; false rolls back payload, recency and eviction.
+    [[nodiscard]] bool record(const TextContent& text, std::int64_t copiedAt,
+                              const std::function<bool()>& mayCommit);
     void prune(std::int64_t now);
     void clear();
     void setRetentionDays(int days, std::int64_t now);

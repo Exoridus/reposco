@@ -10,6 +10,27 @@
 class HistoryTests : public QObject {
     Q_OBJECT
   private slots:
+    void canceledTransactionRollsBackPayloadDedupAndEviction() {
+        QTemporaryDir directory;
+        const std::array<unsigned char, 32> key = {0x31};
+        reposco::HistoryLimits limits;
+        limits.maxItems = 1;
+        reposco::HistoryStore store(directory.filePath("history.db").toStdString(), key, limits);
+        store.record(*reposco::normalizeText("A"), 100);
+        const auto id = store.summaries().front().id;
+        int checks = 0;
+        const auto obsolete = [&checks] { return ++checks == 1; };
+        QVERIFY(!store.record(*reposco::normalizeText("B"), 101, obsolete));
+        QCOMPARE(store.summaries().size(), std::size_t{1});
+        QCOMPARE(store.summaries().front().id, id);
+        QCOMPARE(store.original(id), QByteArray("A"));
+        checks = 0;
+        QVERIFY(!store.record(*reposco::normalizeText(" A "), 102, obsolete));
+        QCOMPARE(store.original(id), QByteArray("A"));
+        QCOMPARE(store.summaries().front().copiedAt, std::int64_t{100});
+        QVERIFY(store.record(*reposco::normalizeText("C"), 103, [] { return true; }));
+        QCOMPARE(store.summaries().front().excerpt, QString("C"));
+    }
     void exactCodesAreExcludedBeforeIdentity() {
         for (const auto& value : {QString("123456"), QString(" 123456\r\n"),
                                   QString::fromUtf8("\xC2\xA0"

@@ -175,12 +175,14 @@ class NativeCaptureTests : public QObject {
         QVERIFY(readSynthetic(owner.get()) == QString("code 123456"));
         const auto captures = captured.count();
         QVERIFY(history.setCapturePolicy(true, false, {QCoreApplication::applicationFilePath()}));
+        QTRY_VERIFY_WITH_TIMEOUT(!history.policyPending(), 5000);
         QTest::qWait(60);
         QVERIFY(writeSynthetic(owner.get(), "excluded native application"));
         QTest::qWait(150);
         QCOMPARE(captured.count(), captures);
         QVERIFY(readSynthetic(owner.get()) == QString("excluded native application"));
         QVERIFY(history.setCapturePolicy(true, false, {}));
+        QTRY_VERIFY_WITH_TIMEOUT(!history.policyPending(), 5000);
         history.selectRow(0);
         const auto beforeRestore = captured.count();
         QSignalSpy restored(&history, &reposco::HistoryController::replayCompleted);

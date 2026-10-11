@@ -102,6 +102,23 @@ void HistoryController::start() {
                     requestPreview();
                 }
             });
+    connect(worker_, &HistoryWorker::policyApplied, this,
+            [this](quint64 generation, bool sixDigits, bool eightDigits,
+                   const QStringList& applications) {
+                if (!policy_pending_ || generation != policy_generation_ || stopping_ || locked_) {
+                    return;
+                }
+                six_digits_ = sixDigits;
+                eight_digits_ = eightDigits;
+                applications_ = applications;
+                monitor_->setExcludedApplications(applications_);
+                policy_pending_ = false;
+                if (clearing_) {
+                    emit stateChanged();
+                } else {
+                    applyActive(resume_after_policy_);
+                }
+            });
     connect(worker_, &HistoryWorker::cleared, this, [this] {
         clearing_ = false;
         if (!locked_ && !stopping_) {
@@ -156,6 +173,9 @@ bool HistoryController::available() const {
 bool HistoryController::captureActive() const {
     return active_;
 }
+bool HistoryController::policyPending() const {
+    return policy_pending_;
+}
 bool HistoryController::locked() const {
     return locked_;
 }
@@ -163,7 +183,7 @@ const QString& HistoryController::status() const {
     return status_;
 }
 void HistoryController::setCaptureActive(bool active) {
-    if (!available_ || stopping_ || clearing_) {
+    if (!available_ || stopping_ || clearing_ || policy_pending_) {
         return;
     }
     applyActive(active);
@@ -180,7 +200,7 @@ const QStringList& HistoryController::excludedApplications() const {
 }
 bool HistoryController::setCapturePolicy(bool sixDigits, bool eightDigits,
                                          const QStringList& applications) {
-    if (!available_ || stopping_ || clearing_ || applications.size() > 32) {
+    if (!available_ || stopping_ || clearing_ || policy_pending_ || applications.size() > 32) {
         return false;
     }
     for (const auto& path : applications) {
@@ -189,20 +209,20 @@ bool HistoryController::setCapturePolicy(bool sixDigits, bool eightDigits,
             return false;
         }
     }
-    const bool resume = active_;
+    resume_after_policy_ = active_;
+    policy_pending_ = true;
     applyActive(false);
-    six_digits_ = sixDigits;
-    eight_digits_ = eightDigits;
-    applications_ = applications;
-    monitor_->setExcludedApplications(applications_);
-    emit policyRequested(sixDigits, eightDigits, applications);
-    applyActive(resume);
+    policy_generation_ = generation_;
+    status_ = tr("Applying privacy rules. Capture is paused until storage confirms.");
+    emit stateChanged();
+    emit policyRequested(sixDigits, eightDigits, applications, policy_generation_);
     return true;
 }
 void HistoryController::clearHistory(bool confirmed) {
     if (!confirmed || !available_ || stopping_ || clearing_) {
         return;
     }
+    resume_after_policy_ = false;
     clearing_ = true;
     search_query_.clear();
     emit searchChanged();
@@ -241,6 +261,7 @@ void HistoryController::failClosed() {
     applyActive(false);
     available_ = false;
     locked_ = true;
+    policy_pending_ = false;
     resetPreview();
     ++search_revision_;
     model_.replace({});
@@ -261,7 +282,8 @@ int HistoryController::retentionDays() const {
     return retention_days_;
 }
 void HistoryController::setRetentionDays(int days, bool confirmed) {
-    if (!confirmed || !available_ || stopping_ || clearing_ || days < 1 || days > 90) {
+    if (!confirmed || !available_ || stopping_ || clearing_ || policy_pending_ || days < 1 ||
+        days > 90) {
         return;
     }
     const bool resume = active_;
