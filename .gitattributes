@@ -4,6 +4,7 @@
 *.sln text eol=crlf
 *.vcxproj* text eol=crlf
 *.png binary
+*.webp binary
 *.ico binary
 # Preserve upstream legal texts verbatim, including their original whitespace.
 packaging/licenses/Qt/*.txt whitespace=-blank-at-eol,-blank-at-eof
