@@ -50,10 +50,10 @@ $env:QML_IMPORT_PATH = "$QtRoot/qml"
 $env:REPOSCO_QT_ROOT = $QtRoot
 
 function Get-BuildJobs {
-    if ($BuildJobs -gt 0) { return $BuildJobs }
     $availableProcessors = [Environment]::ProcessorCount
     if ($env:CI -eq 'true' -or $env:GITHUB_ACTIONS -eq 'true') { return $availableProcessors }
-    return [Math]::Max(1, [int][Math]::Floor($availableProcessors / 2.0))
+    if ($BuildJobs -gt 0) { return $BuildJobs }
+    return [Math]::Max(1, [Math]::Min(6, $availableProcessors))
 }
 
 function Build-Preset([string]$Preset) {

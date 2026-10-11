@@ -40,7 +40,7 @@ QString clipboardOwnerExecutable() {
     if (!process) {
         return {};
     }
-    wchar_t buffer[32768];
+    wchar_t buffer[32768]{};
     DWORD length = static_cast<DWORD>(std::size(buffer));
     const bool resolved = QueryFullProcessImageNameW(process, 0, buffer, &length) != FALSE;
     CloseHandle(process);

@@ -60,7 +60,10 @@ void HistoryWorker::initialize() {
                 throw std::runtime_error("Application exclusion is invalid");
             }
         }
-        emit ready(store_->summaries(), captureEnabled, six_digits_, eight_digits_, applications);
+        const int retentionDays = preferences_->value("retentionDays", 90).toInt();
+        store_->setRetentionDays(retentionDays, QDateTime::currentMSecsSinceEpoch());
+        emit ready(store_->summaries(), captureEnabled, six_digits_, eight_digits_, applications,
+                   retentionDays);
     } catch (const std::exception&) {
         failClosed();
     }
@@ -103,12 +106,45 @@ void HistoryWorker::setPolicy(bool sixDigits, bool eightDigits, const QStringLis
         failClosed();
     }
 }
+void HistoryWorker::setRetentionDays(int days) {
+    try {
+        if (store_ && preferences_) {
+            store_->setRetentionDays(days, QDateTime::currentMSecsSinceEpoch());
+            preferences_->setValue("retentionDays", days);
+            preferences_->sync();
+            if (preferences_->status() != QSettings::NoError) {
+                throw std::runtime_error("Retention preference could not be saved");
+            }
+            emit changed(store_->summaries());
+        }
+    } catch (const std::exception&) {
+        failClosed();
+    }
+}
 void HistoryWorker::clear() {
     try {
         if (store_) {
             store_->clear();
             emit changed({});
             emit cleared();
+        }
+    } catch (const std::exception&) {
+        failClosed();
+    }
+}
+void HistoryWorker::search(const QString& query, quint64 revision) {
+    try {
+        if (store_) {
+            emit searchReady(store_->summaries(query), revision);
+        }
+    } catch (const std::exception&) {
+        failClosed();
+    }
+}
+void HistoryWorker::preview(qint64 id, quint64 revision) {
+    try {
+        if (store_) {
+            emit previewReady(store_->preview(id), revision);
         }
     } catch (const std::exception&) {
         failClosed();

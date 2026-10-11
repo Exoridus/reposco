@@ -38,6 +38,10 @@ class HistoryFlowTests : public QObject {
         controller.start();
         QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
         QVERIFY(controller.excludeSixDigitCodes());
+        controller.setRetentionDays(7, false);
+        QCOMPARE(controller.retentionDays(), 90);
+        controller.setRetentionDays(7, true);
+        QCOMPARE(controller.retentionDays(), 7);
         QVERIFY(!controller.excludeEightDigitCodes());
         controller.setCaptureActive(true);
         quint64 token = 1;
@@ -47,6 +51,16 @@ class HistoryFlowTests : public QObject {
             ++token;
         }
         QCOMPARE(controller.model()->rowCount(), 3);
+        {
+            const auto key = reposco::loadDatabaseKey(directory.path(), true);
+            reposco::HistoryStore stored(directory.filePath("history.db").toStdString(),
+                                         key->bytes());
+            const auto rows = stored.summaries();
+            QCOMPARE(rows.size(), std::size_t{3});
+            QCOMPARE(rows[0].excerpt, QString("code 123456"));
+            QCOMPARE(rows[1].excerpt, QString("1234567"));
+            QCOMPARE(rows[2].excerpt, QString("12345"));
+        }
         QVERIFY(controller.setCapturePolicy(false, true, {"C:/Synthetic/Vault.exe"}));
         emit source->captured("123456", token, source->generation);
         QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, static_cast<int>(token), 5000);
@@ -79,6 +93,7 @@ class HistoryFlowTests : public QObject {
         reopened.start();
         QTRY_VERIFY_WITH_TIMEOUT(reopened.available(), 5000);
         QVERIFY(!reopened.captureActive());
+        QCOMPARE(reopened.retentionDays(), 7);
         QVERIFY(!reopened.excludeSixDigitCodes());
         QVERIFY(reopened.excludeEightDigitCodes());
         QCOMPARE(reopened.excludedApplications(), QStringList{"C:/Synthetic/Vault.exe"});
@@ -94,6 +109,36 @@ class HistoryFlowTests : public QObject {
         QVERIFY(!reposco::isApplicationExcluded("C:/Elsewhere/Vault.exe", rules));
         QVERIFY(!reposco::isApplicationExcluded("C:/Synthetic/Browser.exe", rules));
         QVERIFY(!reposco::isApplicationExcluded({}, {}));
+    }
+    void searchUsesStoredTextAndPreviewIsBoundedOriginal() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        emit source->captured("  Architecture\r\nnotes  ", 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 1, 5000);
+        emit source->captured("Other synthetic", 2, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 2, 5000);
+        QVERIFY(controller.setProperty("searchQuery", "architecture"));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        const auto id =
+            controller.model()
+                ->data(controller.model()->index(0, 0), reposco::HistoryModel::EntryIdRole)
+                .toLongLong();
+        QVERIFY(QMetaObject::invokeMethod(&controller, "selectEntry", Q_ARG(qint64, id)));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.property("preview").toString(),
+                                  QString("  Architecture\r\nnotes  "), 5000);
+        QVERIFY(controller.setProperty("searchQuery", "no synthetic match"));
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 0, 5000);
+        controller.clearHistory(true);
+        QVERIFY(controller.property("preview").toString().isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        QSignalSpy stopped(&controller, &reposco::HistoryController::stopped);
+        controller.shutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(stopped.count(), 1, 5000);
     }
     void optInDedupPauseAndShutdown() {
         QTemporaryDir directory;

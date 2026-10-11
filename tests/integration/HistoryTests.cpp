@@ -89,6 +89,34 @@ class HistoryTests : public QObject {
         reposco::HistoryStore reopened(path, key);
         QCOMPARE(reopened.summaries().size(), std::size_t{3});
     }
+    void previewPreservesBoundedOriginalAndLiteralSearchDoesNotTreatWildcardsAsPatterns() {
+        QTemporaryDir directory;
+        const std::array<unsigned char, 32> key = {0x31};
+        reposco::HistoryStore store(directory.filePath("preview.db").toStdString(), key);
+        const QString original = " \r\n" + QString(10000, QChar('x')) + "tail";
+        store.record(*reposco::normalizeText(original), 100);
+        const auto id = store.summaries()[0].id;
+        const auto preview = store.preview(id);
+        QCOMPARE(preview.size(), 8192);
+        QVERIFY(preview.startsWith(" \r\n"));
+        QVERIFY(!preview.endsWith("tail"));
+        QVERIFY(store.summaries("tail").size() == 1);
+        QVERIFY(store.summaries("%").empty());
+        store.clear();
+        QVERIFY(store.preview(id).isEmpty());
+    }
+    void retentionChangeRequiresSupportedDaysAndPrunes() {
+        QTemporaryDir directory;
+        const std::array<unsigned char, 32> key = {0x31};
+        reposco::HistoryStore store(directory.filePath("retention.db").toStdString(), key);
+        store.record(*reposco::normalizeText("old synthetic"), 0);
+        store.record(*reposco::normalizeText("new synthetic"), 8LL * 86400000);
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, store.setRetentionDays(0, 8LL * 86400000));
+        QVERIFY_THROWS_EXCEPTION(std::invalid_argument, store.setRetentionDays(91, 8LL * 86400000));
+        store.setRetentionDays(7, 8LL * 86400000);
+        QCOMPARE(store.summaries().size(), std::size_t{1});
+        QCOMPARE(store.summaries()[0].excerpt, QString("new synthetic"));
+    }
     void budgetsAndSchemaFailClosed() {
         QTemporaryDir directory;
         const auto path = directory.filePath("history.db").toStdString();

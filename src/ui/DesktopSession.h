@@ -18,6 +18,8 @@ namespace reposco {
 class HistoryController;
 class DesktopSession final : public QObject {
     Q_OBJECT
+    Q_PROPERTY(QString shortcut READ shortcut NOTIFY shortcutChanged)
+    Q_PROPERTY(QString shortcutStatus READ shortcutStatus NOTIFY shortcutChanged)
   public:
     explicit DesktopSession(QObject* parent = nullptr);
     ~DesktopSession() override;
@@ -25,9 +27,15 @@ class DesktopSession final : public QObject {
     [[nodiscard]] QQuickWindow* window() const;
     [[nodiscard]] bool trayAvailable() const;
     [[nodiscard]] unsigned long hotkeyError() const;
+    Q_INVOKABLE void showWindow();
     void toggleWindow();
+    void focusSearch();
+    [[nodiscard]] const QString& shortcut() const;
+    [[nodiscard]] const QString& shortcutStatus() const;
+    Q_INVOKABLE bool setShortcut(const QString& shortcut);
   signals:
     void quitRequested();
+    void shortcutChanged();
 
   private:
     QQmlApplicationEngine engine_;
@@ -39,5 +47,7 @@ class DesktopSession final : public QObject {
     QMenu tray_menu_;
     QSystemTrayIcon tray_;
     GlobalHotkey hotkey_;
+    QString shortcut_ = QStringLiteral("Win+Alt+V");
+    QString shortcut_status_;
 };
 } // namespace reposco

@@ -22,6 +22,20 @@ target_link_libraries(
   PRIVATE QWKQuick)
 reposco_owned_target(reposco_ui)
 set_source_files_properties(../../qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
+set_property(SOURCE ../../qml/SettingsWindow.qml PROPERTY QT_RESOURCE_ALIAS SettingsWindow.qml)
+set(paletteComponents
+    ../../qml/components/StyleTokens.qml
+    ../../qml/components/GlassSurface.qml
+    ../../qml/components/ActionButton.qml
+    ../../qml/components/PolicySwitch.qml
+    ../../qml/components/PaletteSearch.qml
+    ../../qml/components/PreviewPane.qml
+    ../../qml/components/HistorySlot.qml
+    ../../qml/components/EmptyState.qml)
+foreach(component IN LISTS paletteComponents)
+  get_filename_component(componentName "${component}" NAME)
+  set_property(SOURCE ${component} PROPERTY QT_RESOURCE_ALIAS "components/${componentName}")
+endforeach()
 set(softGlass ../../qml/components/SoftGlass.qml)
 set_source_files_properties(${softGlass} PROPERTIES QT_RESOURCE_ALIAS components/SoftGlass.qml)
 qt_add_qml_module(
@@ -36,12 +50,17 @@ qt_add_qml_module(
   "${PROJECT_BINARY_DIR}/qml/Reposco"
   QML_FILES
   ../../qml/Main.qml
+  ../../qml/SettingsWindow.qml
+  ${paletteComponents}
   ../../qml/components/SoftGlass.qml)
 if(MSVC)
   # Qt 6.12's generated QML casts trigger C4702 in Qt headers with newer MSVC. Owned C++ retains
-  # /WX; this exception covers only the generated Main cache.
+  # /WX; this exception covers only the affected generated QML caches.
   set_source_files_properties(
     "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_Main_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_SettingsWindow_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_HistorySlot_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_GlassSurface_qml.cpp"
     PROPERTIES COMPILE_OPTIONS /wd4702)
 endif()
 configure_file(reposco.rc.in "${CMAKE_CURRENT_BINARY_DIR}/reposco.rc" @ONLY)
@@ -59,7 +78,8 @@ qt_add_resources(
   FILES
   ../../assets/branding/reposco.ico
   ../../assets/branding/reposco-icon-primary.png
-  ../../assets/branding/reposco-wordmark-primary.png)
+  ../../assets/branding/reposco-wordmark-primary.png
+  ../../assets/branding/reposco-wordmark-dark.png)
 if(BUILD_TESTING)
   qt_add_executable(desktop_tests ../../tests/integration/DesktopTests.cpp)
   target_link_libraries(desktop_tests PRIVATE reposco_ui reposco_uiplugin Qt6::Test)

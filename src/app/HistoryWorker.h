@@ -28,15 +28,20 @@ class HistoryWorker final : public QObject {
     void setPreference(bool active);
     void setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications);
     void clear();
+    void setRetentionDays(int days);
+    void search(const QString& query, quint64 revision);
+    void preview(qint64 id, quint64 revision);
     void close();
   signals:
     void ready(reposco::HistorySummaries rows, bool captureEnabled, bool sixDigits,
-               bool eightDigits, QStringList applications);
+               bool eightDigits, QStringList applications, int retentionDays);
     void changed(reposco::HistorySummaries rows);
     void processed(quint64 token);
     void locked();
     void closed();
     void cleared();
+    void searchReady(reposco::HistorySummaries rows, quint64 revision);
+    void previewReady(QString text, quint64 revision);
 
   private:
     void failClosed();

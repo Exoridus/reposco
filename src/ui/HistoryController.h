@@ -15,6 +15,9 @@ class HistoryController final : public QObject {
     QML_ELEMENT
     QML_UNCREATABLE("Owned by the application")
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
+    Q_PROPERTY(QString searchQuery READ searchQuery WRITE setSearchQuery NOTIFY searchChanged)
+    Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
+    Q_PROPERTY(int retentionDays READ retentionDays NOTIFY stateChanged)
     Q_PROPERTY(bool available READ available NOTIFY stateChanged)
     Q_PROPERTY(bool captureActive READ captureActive NOTIFY stateChanged)
     Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
@@ -35,19 +38,31 @@ class HistoryController final : public QObject {
     Q_INVOKABLE void setCaptureActive(bool active);
     [[nodiscard]] bool excludeSixDigitCodes() const;
     [[nodiscard]] bool excludeEightDigitCodes() const;
-    [[nodiscard]] QStringList excludedApplications() const;
+    [[nodiscard]] const QStringList& excludedApplications() const;
     Q_INVOKABLE bool setCapturePolicy(bool sixDigits, bool eightDigits,
                                       const QStringList& applications);
     Q_INVOKABLE void clearHistory(bool confirmed);
+    [[nodiscard]] const QString& searchQuery() const;
+    [[nodiscard]] const QString& preview() const;
+    void setSearchQuery(const QString& query);
+    Q_INVOKABLE void selectEntry(qint64 id);
+    Q_INVOKABLE void selectRow(int row);
+    [[nodiscard]] int retentionDays() const;
+    Q_INVOKABLE void setRetentionDays(int days, bool confirmed);
     void shutdown();
   signals:
     void stateChanged();
+    void searchChanged();
+    void previewChanged();
+    void searchRequested(QString query, quint64 revision);
+    void previewRequested(qint64 id, quint64 revision);
     void stopped();
     void recordRequested(QString text, quint64 token, quint64 generation);
     void preferenceRequested(bool active);
     void closeRequested();
     void policyRequested(bool sixDigits, bool eightDigits, QStringList applications);
     void clearRequested();
+    void retentionRequested(int days);
 
   private:
     void applyActive(bool active);
@@ -55,6 +70,17 @@ class HistoryController final : public QObject {
     void failClosed();
     void finishShutdown();
     void acceptCapture(const QString& text, quint64 token, quint64 generation);
+    void requestSearch();
+    void requestPreview();
+    void resetPreview();
+    QString search_query_;
+    QString preview_;
+    qint64 selected_id_ = 0;
+    quint64 search_revision_ = 0;
+    quint64 preview_revision_ = 0;
+    bool search_pending_ = false;
+    bool preview_pending_ = false;
+    int retention_days_ = 90;
     bool six_digits_ = true;
     bool eight_digits_ = false;
     bool clearing_ = false;

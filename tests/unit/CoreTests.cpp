@@ -50,6 +50,11 @@ int main() {
                               reposco::TextCaptureDecision::Excluded &&
                           source.reads == 0,
                       "exclude before reading text");
+    source.permissionPresent = true;
+    passed &= require(reposco::captureAllowedText(source).decision ==
+                              reposco::TextCaptureDecision::Excluded &&
+                          source.reads == 0,
+                      "permission cannot override an exclusion marker");
     source.excluded = false;
     source.permissionPresent = true;
     source.permission = 0;

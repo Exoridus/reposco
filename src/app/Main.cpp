@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QIcon>
+#include <QLoggingCategory>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -12,6 +13,9 @@
 
 int main(int argc, char* argv[]) {
     QApplication application(argc, argv);
+    if (application.arguments().contains("--diagnostics")) {
+        QLoggingCategory::setFilterRules(QStringLiteral("reposco.lifecycle.info=true"));
+    }
     QApplication::setApplicationName("Reposco");
     QApplication::setOrganizationName("Reposco");
     QApplication::setApplicationVersion(REPOSCO_VERSION);
@@ -42,7 +46,7 @@ int main(int argc, char* argv[]) {
                      &QApplication::quit);
     history.start();
     if (application.arguments().contains("--show") || !session.trayAvailable()) {
-        session.toggleWindow();
+        session.showWindow();
     }
     if (smoke) {
         session.window()->show();
@@ -54,5 +58,9 @@ int main(int argc, char* argv[]) {
             }
         });
     }
-    return application.exec();
+    const int result = application.exec();
+    if (application.arguments().contains("--diagnostics")) {
+        qInfo("Reposco event loop exited: %d", result);
+    }
+    return result;
 }

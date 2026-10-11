@@ -12,6 +12,7 @@ class GlobalHotkey final : public QObject, public QAbstractNativeEventFilter {
     [[nodiscard]] bool registerDefault();
     void unregister();
     [[nodiscard]] unsigned long errorCode() const;
+    [[nodiscard]] bool registerShortcut(unsigned int modifiers, unsigned int key);
     bool nativeEventFilter(const QByteArray& eventType, void* message, qintptr* result) override;
   signals:
     void activated();

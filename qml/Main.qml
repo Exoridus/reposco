@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import Reposco
 import "components"
@@ -9,62 +9,147 @@ import "components"
 Window {
     id: root
 
+    property alias darkMode: paletteStyle.darkMode
+    property var desktopSession: null
     property HistoryController historyController: null
+    property alias reducedMotion: paletteStyle.reducedMotion
+
+    function confirmClearHistory() {
+        openSettings();
+        settings.confirmingClear = true;
+    }
+    function moveSelection(delta) {
+        if (historyList.count > 0) {
+            historyList.currentIndex = Math.max(0, Math.min(historyList.count - 1, historyList.currentIndex + delta));
+            historyList.positionViewAtIndex(historyList.currentIndex, ListView.Contain);
+        }
+    }
+    function openSettings() {
+        settings.show();
+        settings.raise();
+        settings.requestActivate();
+    }
 
     color: "transparent"
-    height: 500
-    minimumHeight: 400
-    minimumWidth: 400
+    height: historyList.count > 0 ? 308 + Math.min(4, historyList.count) * 38 : 310
+    minimumHeight: 280
+    minimumWidth: 440
     title: qsTr("Reposco")
     visible: false
-    width: 620
+    width: 680
 
     onClosing: function (close) {
         close.accepted = false;
         root.hide();
     }
 
-    SoftGlass {
+    StyleTokens {
+        id: paletteStyle
+    }
+    SettingsWindow {
+        id: settings
+
+        desktopSession: root.desktopSession
+        historyController: root.historyController
+        objectName: "settingsWindow"
+        tokens: paletteStyle
+    }
+    Connections {
+        function onModelReset() {
+            historyList.currentIndex = historyList.count > 0 ? 0 : -1;
+            if (root.historyController)
+                root.historyController.selectRow(historyList.currentIndex);
+        }
+
+        target: root.historyController ? root.historyController.model : null
+    }
+    Connections {
+        function onSearchChanged() {
+            if (root.historyController)
+                search.text = root.historyController.searchQuery;
+        }
+        function onStateChanged() {
+            if (root.historyController && root.historyController.available)
+                root.historyController.selectRow(historyList.currentIndex);
+        }
+
+        target: root.historyController
+    }
+    GlassSurface {
         anchors.fill: parent
+        tokens: paletteStyle
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 20
+            anchors.margins: 22
             spacing: 10
 
-            Image {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 44
-                fillMode: Image.PreserveAspectFit
-                horizontalAlignment: Image.AlignLeft
-                objectName: "titleBar"
-                source: "qrc:/assets/branding/reposco-wordmark-primary.png"
-            }
-            Text {
-                Layout.fillWidth: true
-                color: "#c4cfdd"
-                font.pixelSize: 13
-                text: root.historyController ? root.historyController.status : qsTr("Capture unavailable.")
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-            }
-            Text {
-                Layout.fillWidth: true
-                color: "#c4cfdd"
-                font.pixelSize: 12
-                text: qsTr("Starting capture stores future copied text locally in encrypted history. Unmarked passwords may still be captured. Pause at any time; resuming does not collect the current clipboard.")
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
-            }
-            Button {
-                enabled: root.historyController !== null && root.historyController.available
-                objectName: "captureToggle"
-                text: root.historyController && root.historyController.captureActive ? qsTr("Pause capture") : qsTr("Start / resume text capture")
+            RowLayout {
+                id: titleBar
 
-                onClicked: {
-                    if (root.historyController)
-                        root.historyController.setCaptureActive(!root.historyController.captureActive);
+                Layout.fillWidth: true
+                Layout.preferredHeight: 26
+                objectName: "titleBar"
+                spacing: 10
+
+                Image {
+                    Layout.preferredHeight: 23
+                    Layout.preferredWidth: 23
+                    fillMode: Image.PreserveAspectFit
+                    source: "qrc:/assets/branding/reposco-icon-primary.png"
+                    sourceSize.height: 64
+                    sourceSize.width: 64
                 }
+                Image {
+                    Layout.preferredHeight: 23
+                    Layout.preferredWidth: 90
+                    fillMode: Image.PreserveAspectFit
+                    source: paletteStyle.darkMode ? "qrc:/assets/branding/reposco-wordmark-primary.png" : "qrc:/assets/branding/reposco-wordmark-dark.png"
+                }
+                Text {
+                    color: paletteStyle.secondary
+                    font.pixelSize: 12
+                    text: qsTr("History")
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                Text {
+                    color: paletteStyle.secondary
+                    font.pixelSize: 11
+                    text: root.historyController && root.historyController.captureActive ? qsTr("Capturing") : qsTr("Paused")
+                }
+                ActionButton {
+                    objectName: "settingsButton"
+                    padding: 5
+                    text: qsTr("Settings")
+                    tokens: paletteStyle
+
+                    onClicked: root.openSettings()
+                }
+            }
+            PaletteSearch {
+                id: search
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: 42
+                objectName: "paletteSearch"
+                tokens: paletteStyle
+
+                Keys.onDownPressed: root.moveSelection(1)
+                Keys.onEscapePressed: root.hide()
+                Keys.onUpPressed: root.moveSelection(-1)
+                onTextChanged: {
+                    if (root.historyController)
+                        root.historyController.searchQuery = text;
+                }
+            }
+            PreviewPane {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 134
+                preview: root.historyController ? root.historyController.preview : ""
+                tokens: paletteStyle
+                visible: historyList.count > 0
             }
             ListView {
                 id: historyList
@@ -72,78 +157,68 @@ Window {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
                 clip: true
+                currentIndex: count > 0 ? 0 : -1
                 model: root.historyController ? root.historyController.model : null
                 objectName: "historyList"
-                spacing: 6
+                spacing: 3
+                visible: count > 0
 
                 ScrollBar.vertical: ScrollBar {
                 }
-                delegate: Rectangle {
-                    id: row
+                delegate: HistorySlot {
+                    required property var entryId
+                    required property int index
 
-                    required property double copiedAt
-                    required property string excerpt
-
-                    color: "#283648"
-                    height: 66
-                    radius: 8
+                    animate: root.visible
+                    height: 35
+                    selected: historyList.currentIndex === index
+                    tokens: paletteStyle
                     width: historyList.width
 
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 4
-
-                        Text {
-                            color: "#f5f7fb"
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            objectName: "historyExcerpt"
-                            text: row.excerpt.replace(/\n/g, " ")
-                            textFormat: Text.PlainText
-                            width: parent.width
-                        }
-                        Text {
-                            color: "#c4cfdd"
-                            font.pixelSize: 11
-                            text: new Date(row.copiedAt).toLocaleTimeString()
-                            textFormat: Text.PlainText
-                        }
+                    onClicked: {
+                        historyList.currentIndex = index;
+                        search.forceActiveFocus();
                     }
                 }
 
-                Text {
-                    anchors.centerIn: parent
-                    color: "#c4cfdd"
-                    text: qsTr("No text history yet.")
-                    textFormat: Text.PlainText
-                    visible: historyList.count === 0
+                onCurrentIndexChanged: {
+                    if (root.historyController)
+                        root.historyController.selectRow(currentIndex);
                 }
             }
-            Text {
+            EmptyState {
+                Layout.fillHeight: true
                 Layout.fillWidth: true
-                color: "#c4cfdd"
-                font.pixelSize: 12
-                objectName: "hotkeyStatus"
-                text: qsTr("Latest 100 entries. Win+Alt+V opens this palette. Esc hides it.")
-                textFormat: Text.PlainText
-                wrapMode: Text.WordWrap
+                captureActive: root.historyController !== null && root.historyController.captureActive
+                objectName: "emptyState"
+                searching: search.text.length > 0
+                tokens: paletteStyle
+                visible: historyList.count === 0
+
+                onSettingsRequested: root.openSettings()
             }
             RowLayout {
-                Button {
-                    text: qsTr("Hide palette")
+                Layout.fillWidth: true
+                Layout.preferredHeight: 20
 
-                    onClicked: root.hide()
+                Text {
+                    color: paletteStyle.secondary
+                    font.pixelSize: 11
+                    text: qsTr("↑ ↓ Select    Esc Close")
                 }
-                Button {
-                    text: qsTr("Quit Reposco")
-
-                    onClicked: Qt.quit()
+                Item {
+                    Layout.fillWidth: true
+                }
+                Text {
+                    color: paletteStyle.secondary
+                    font.pixelSize: 11
+                    text: qsTr("View only · Paste not available")
                 }
             }
         }
     }
     Shortcut {
+        enabled: root.visible && root.active
         sequence: "Escape"
 
         onActivated: root.hide()

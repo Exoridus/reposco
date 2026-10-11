@@ -11,6 +11,7 @@ struct HistorySummary {
     std::int64_t id = 0;
     QString excerpt;
     std::int64_t copiedAt = 0;
+    std::int64_t payloadBytes = 0;
 };
 struct HistoryLimits {
     std::int64_t maxItems = 1000;
@@ -24,7 +25,9 @@ class HistoryStore final {
     void record(const TextContent& text, std::int64_t copiedAt);
     void prune(std::int64_t now);
     void clear();
-    [[nodiscard]] std::vector<HistorySummary> summaries() const;
+    void setRetentionDays(int days, std::int64_t now);
+    [[nodiscard]] std::vector<HistorySummary> summaries(const QString& search = {}) const;
+    [[nodiscard]] QString preview(std::int64_t id) const;
     [[nodiscard]] QByteArray original(std::int64_t id) const;
 
   private:

@@ -172,20 +172,37 @@ void HistoryStore::prune(std::int64_t now) {
     evict(database_.database_.get(), limits_, now);
     transaction.commit();
 }
+void HistoryStore::setRetentionDays(int days, std::int64_t now) {
+    if (days < 1 || days > 90 || now < 0) {
+        throw std::invalid_argument("Retention must be between 1 and 90 days");
+    }
+    limits_.retentionMs = static_cast<std::int64_t>(days) * 86400000;
+    prune(now);
+}
 void HistoryStore::clear() {
     Transaction transaction(database_);
     database_.execute("DELETE FROM history");
     transaction.commit();
     database_.execute("PRAGMA shrink_memory");
 }
-std::vector<HistorySummary> HistoryStore::summaries() const {
-    Statement query(database_.database_.get(), "SELECT id,substr(canonical,1,200),last_copied_ms "
-                                               "FROM history ORDER BY ordinal DESC LIMIT 100");
+std::vector<HistorySummary> HistoryStore::summaries(const QString& search) const {
+    Statement query(database_.database_.get(),
+                    "SELECT id,substr(canonical,1,200),last_copied_ms,payload_bytes "
+                    "FROM history WHERE instr(lower(canonical),lower(?1))>0 "
+                    "ORDER BY ordinal DESC LIMIT 100");
+    query.bind(1, search.left(256).toUtf8(), true);
     std::vector<HistorySummary> result;
     while (query.next()) {
-        result.push_back({query.integer(0), QString::fromUtf8(query.bytes(1)), query.integer(2)});
+        result.push_back({query.integer(0), QString::fromUtf8(query.bytes(1)), query.integer(2),
+                          query.integer(3)});
     }
     return result;
+}
+QString HistoryStore::preview(std::int64_t id) const {
+    Statement query(database_.database_.get(),
+                    "SELECT substr(CAST(original AS TEXT),1,8192) FROM history WHERE id=?1");
+    query.bind(1, id);
+    return query.next() ? QString::fromUtf8(query.bytes(0)) : QString{};
 }
 QByteArray HistoryStore::original(std::int64_t id) const {
     Statement query(database_.database_.get(), "SELECT original FROM history WHERE id=?1");

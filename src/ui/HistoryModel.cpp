@@ -16,12 +16,17 @@ QVariant HistoryModel::data(const QModelIndex& index, int role) const {
         return row.excerpt;
     case CopiedAtRole:
         return QVariant::fromValue(static_cast<qlonglong>(row.copiedAt));
+    case PayloadBytesRole:
+        return QVariant::fromValue(static_cast<qlonglong>(row.payloadBytes));
     default:
         return {};
     }
 }
 QHash<int, QByteArray> HistoryModel::roleNames() const {
-    return {{EntryIdRole, "entryId"}, {ExcerptRole, "excerpt"}, {CopiedAtRole, "copiedAt"}};
+    return {{EntryIdRole, "entryId"},
+            {ExcerptRole, "excerpt"},
+            {CopiedAtRole, "copiedAt"},
+            {PayloadBytesRole, "payloadBytes"}};
 }
 void HistoryModel::replace(std::vector<HistorySummary> rows) {
     beginResetModel();

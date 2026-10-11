@@ -34,10 +34,10 @@ cmake --preset windows-debug -DREPOSCO_ISOLATED_CLIPBOARD_TESTS=ON
 
 An enabled isolation test fails when privileges or isolation are missing. Leave the option OFF on an ordinary local account. `reposco.exe --smoke` always uses temporary storage and disabled capture, regardless of the real profile's saved preference.
 
-Local dev.ps1 builds default to half the available logical processors, rounded
-down with at least one job. CI (`CI=true` or `GITHUB_ACTIONS=true`) uses the full
-available processor count. `-BuildJobs <count>` explicitly overrides either
-choice; `./tools/dev.ps1 build -BuildJobs 1` minimizes local load. CTest remains
+Local dev.ps1 builds default to six parallel jobs, capped to the available
+logical processors with at least one job. CI (`CI=true` or `GITHUB_ACTIONS=true`) uses the full
+available processor count, regardless of `-BuildJobs`. `-BuildJobs <count>`
+overrides the local default; `./tools/dev.ps1 build -BuildJobs 1` minimizes local load. CTest remains
 sequential by default. Prefer a focused `-TestFilter` while iterating; reserve
 full analysis and packaging for integrated completion. Direct CMake invocations
 retain their normal parallelism unless `--parallel <count>` is supplied.

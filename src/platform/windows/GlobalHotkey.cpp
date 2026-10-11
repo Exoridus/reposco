@@ -21,8 +21,12 @@ bool GlobalHotkey::registerDefault() {
     if (registered_) {
         return true;
     }
-    registered_ =
-        RegisterHotKey(nullptr, kHotkeyId, MOD_WIN | MOD_ALT | MOD_NOREPEAT, 'V') != FALSE;
+    return registerShortcut(MOD_WIN | MOD_ALT, 'V');
+}
+bool GlobalHotkey::registerShortcut(unsigned int modifiers, unsigned int key) {
+    Q_ASSERT(QThread::currentThread() == thread());
+    unregister();
+    registered_ = RegisterHotKey(nullptr, kHotkeyId, modifiers | MOD_NOREPEAT, key) != FALSE;
     error_code_ = registered_ ? ERROR_SUCCESS : GetLastError();
     return registered_;
 }

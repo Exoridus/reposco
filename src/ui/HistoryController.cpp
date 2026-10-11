@@ -48,6 +48,35 @@ void HistoryController::start() {
     connect(this, &HistoryController::closeRequested, worker_, &HistoryWorker::close);
     connect(this, &HistoryController::policyRequested, worker_, &HistoryWorker::setPolicy);
     connect(this, &HistoryController::clearRequested, worker_, &HistoryWorker::clear);
+    connect(this, &HistoryController::retentionRequested, worker_,
+            &HistoryWorker::setRetentionDays);
+    connect(this, &HistoryController::searchRequested, worker_, &HistoryWorker::search);
+    connect(this, &HistoryController::previewRequested, worker_, &HistoryWorker::preview);
+    connect(worker_, &HistoryWorker::searchReady, this,
+            [this](HistorySummaries rows, quint64 revision) {
+                search_pending_ = false;
+                if (!available_ || stopping_ || clearing_ || locked_) {
+                    return;
+                }
+                if (revision == search_revision_) {
+                    model_.replace(std::move(rows));
+                } else {
+                    requestSearch();
+                }
+            });
+    connect(worker_, &HistoryWorker::previewReady, this,
+            [this](const QString& text, quint64 revision) {
+                preview_pending_ = false;
+                if (!available_ || stopping_ || clearing_ || locked_) {
+                    return;
+                }
+                if (revision == preview_revision_) {
+                    preview_ = text;
+                    emit previewChanged();
+                } else {
+                    requestPreview();
+                }
+            });
     connect(worker_, &HistoryWorker::cleared, this, [this] {
         clearing_ = false;
         if (!locked_ && !stopping_) {
@@ -59,11 +88,12 @@ void HistoryController::start() {
             Qt::DirectConnection);
     connect(worker_, &HistoryWorker::ready, this,
             [this](HistorySummaries rows, bool active, bool sixDigits, bool eightDigits,
-                   const QStringList& applications) {
+                   const QStringList& applications, int retentionDays) {
                 if (locked_ || stopping_) {
                     return;
                 }
                 model_.replace(std::move(rows));
+                retention_days_ = retentionDays;
                 six_digits_ = sixDigits;
                 eight_digits_ = eightDigits;
                 applications_ = applications;
@@ -74,7 +104,12 @@ void HistoryController::start() {
             });
     connect(worker_, &HistoryWorker::changed, this, [this](HistorySummaries rows) {
         if (!locked_ && !stopping_ && !clearing_) {
-            model_.replace(std::move(rows));
+            if (search_query_.isEmpty()) {
+                model_.replace(std::move(rows));
+            } else {
+                ++search_revision_;
+                requestSearch();
+            }
         }
     });
     connect(worker_, &HistoryWorker::processed, this, [this](quint64 token) {
@@ -115,7 +150,7 @@ bool HistoryController::excludeSixDigitCodes() const {
 bool HistoryController::excludeEightDigitCodes() const {
     return eight_digits_;
 }
-QStringList HistoryController::excludedApplications() const {
+const QStringList& HistoryController::excludedApplications() const {
     return applications_;
 }
 bool HistoryController::setCapturePolicy(bool sixDigits, bool eightDigits,
@@ -144,8 +179,12 @@ void HistoryController::clearHistory(bool confirmed) {
         return;
     }
     clearing_ = true;
+    search_query_.clear();
+    emit searchChanged();
     applyActive(false);
     available_ = false;
+    resetPreview();
+    ++search_revision_;
     model_.replace({});
     emit preferenceRequested(false);
     emit clearRequested();
@@ -174,6 +213,8 @@ void HistoryController::failClosed() {
     applyActive(false);
     available_ = false;
     locked_ = true;
+    resetPreview();
+    ++search_revision_;
     model_.replace({});
     status_ = tr("History is locked or unavailable. Capture is disabled; files were preserved.");
     emit stateChanged();
@@ -188,7 +229,74 @@ void HistoryController::acceptCapture(const QString& text, quint64 token, quint6
     pending_token_ = token;
     emit recordRequested(text, token, generation);
 }
+int HistoryController::retentionDays() const {
+    return retention_days_;
+}
+void HistoryController::setRetentionDays(int days, bool confirmed) {
+    if (!confirmed || !available_ || stopping_ || clearing_ || days < 1 || days > 90) {
+        return;
+    }
+    const bool resume = active_;
+    applyActive(false);
+    resetPreview();
+    retention_days_ = days;
+    emit retentionRequested(days);
+    applyActive(resume);
+}
+const QString& HistoryController::searchQuery() const {
+    return search_query_;
+}
+const QString& HistoryController::preview() const {
+    return preview_;
+}
+void HistoryController::setSearchQuery(const QString& query) {
+    const auto bounded = query.left(256);
+    if (bounded == search_query_) {
+        return;
+    }
+    search_query_ = bounded;
+    ++search_revision_;
+    resetPreview();
+    emit searchChanged();
+    requestSearch();
+}
+void HistoryController::requestSearch() {
+    if (available_ && !search_pending_ && !stopping_ && !clearing_) {
+        search_pending_ = true;
+        emit searchRequested(search_query_, search_revision_);
+    }
+}
+void HistoryController::selectRow(int row) {
+    if (row < 0 || row >= model_.rowCount()) {
+        resetPreview();
+        return;
+    }
+    selectEntry(model_.data(model_.index(row, 0), HistoryModel::EntryIdRole).toLongLong());
+}
+void HistoryController::selectEntry(qint64 id) {
+    if (!available_ || stopping_ || clearing_) {
+        return;
+    }
+    selected_id_ = id;
+    ++preview_revision_;
+    preview_.clear();
+    emit previewChanged();
+    requestPreview();
+}
+void HistoryController::requestPreview() {
+    if (available_ && selected_id_ > 0 && !preview_pending_ && !stopping_ && !clearing_) {
+        preview_pending_ = true;
+        emit previewRequested(selected_id_, preview_revision_);
+    }
+}
+void HistoryController::resetPreview() {
+    selected_id_ = 0;
+    ++preview_revision_;
+    preview_.clear();
+    emit previewChanged();
+}
 void HistoryController::shutdown() {
+    resetPreview();
     if (stopping_) {
         return;
     }
