@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     QApplication::setApplicationName("Reposco");
     QApplication::setOrganizationName("Reposco");
     QApplication::setApplicationVersion(REPOSCO_VERSION);
-    QApplication::setWindowIcon(QIcon(":/assets/branding/temporary-icon.svg"));
+    QApplication::setWindowIcon(QIcon(":/assets/branding/reposco.ico"));
     QApplication::setQuitOnLastWindowClosed(false);
     QQuickWindow::setDefaultAlphaBuffer(true);
     const bool smoke = application.arguments().contains("--smoke");

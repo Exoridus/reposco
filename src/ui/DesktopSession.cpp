@@ -61,7 +61,7 @@ bool DesktopSession::initialize(HistoryController* history) {
     tray_menu_.addAction(&capture_action_);
     tray_menu_.addSeparator();
     tray_menu_.addAction(&quit_action_);
-    tray_.setIcon(QIcon(":/assets/branding/temporary-icon.svg"));
+    tray_.setIcon(QIcon(":/assets/branding/reposco.ico"));
     tray_.setToolTip(tr("Reposco - encrypted text history"));
     tray_.setContextMenu(&tray_menu_);
     tray_.show();

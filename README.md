@@ -1,5 +1,7 @@
 # Reposco
 
+![Reposco](assets/branding/reposco-banner-primary.png)
+
 An offline, privacy-oriented clipboard manager for Windows, built with C++20 and Qt Quick.
 
 **Status: 0.1.0-dev text-history slice.** The executable provides opt-in Unicode text capture, SQLCipher-encrypted local history, a random DPAPI-protected key, Smart dedup, Pause/Resume, a plain-text history list, QWindowKit palette, SoftGlass fallback, tray and Win+Alt+V hotkey. First launch is paused. Capture consent and pause persist; resuming never imports the existing clipboard. Paste, search, pinning and image/HTML capture are not implemented yet.

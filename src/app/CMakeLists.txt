@@ -44,7 +44,8 @@ if(MSVC)
     "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_Main_qml.cpp"
     PROPERTIES COMPILE_OPTIONS /wd4702)
 endif()
-qt_add_executable(reposco WIN32 Main.cpp)
+configure_file(reposco.rc.in "${CMAKE_CURRENT_BINARY_DIR}/reposco.rc" @ONLY)
+qt_add_executable(reposco WIN32 Main.cpp "${CMAKE_CURRENT_BINARY_DIR}/reposco.rc")
 target_link_libraries(reposco PRIVATE reposco_ui reposco_uiplugin)
 target_compile_definitions(reposco PRIVATE REPOSCO_VERSION="${REPOSCO_VERSION}")
 reposco_owned_target(reposco)
@@ -56,7 +57,9 @@ qt_add_resources(
   BASE
   "${PROJECT_SOURCE_DIR}/assets"
   FILES
-  ../../assets/branding/temporary-icon.svg)
+  ../../assets/branding/reposco.ico
+  ../../assets/branding/reposco-icon-primary.png
+  ../../assets/branding/reposco-wordmark-primary.png)
 if(BUILD_TESTING)
   qt_add_executable(desktop_tests ../../tests/integration/DesktopTests.cpp)
   target_link_libraries(desktop_tests PRIVATE reposco_ui reposco_uiplugin Qt6::Test)

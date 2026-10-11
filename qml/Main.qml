@@ -32,14 +32,13 @@ Window {
             anchors.margins: 20
             spacing: 10
 
-            Text {
+            Image {
                 Layout.fillWidth: true
-                color: "#f5f7fb"
-                font.bold: true
-                font.pixelSize: 26
+                Layout.preferredHeight: 44
+                fillMode: Image.PreserveAspectFit
+                horizontalAlignment: Image.AlignLeft
                 objectName: "titleBar"
-                text: qsTr("Reposco")
-                textFormat: Text.PlainText
+                source: "qrc:/assets/branding/reposco-wordmark-primary.png"
             }
             Text {
                 Layout.fillWidth: true
