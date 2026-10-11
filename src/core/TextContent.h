@@ -10,5 +10,7 @@ struct TextContent {
     QByteArray canonical;
     QByteArray fingerprint;
 };
-[[nodiscard]] std::optional<TextContent> normalizeText(const QString& text);
+[[nodiscard]] std::optional<TextContent> normalizeText(const QString& text,
+                                                       bool excludeSixDigitCodes = true,
+                                                       bool excludeEightDigitCodes = false);
 } // namespace reposco

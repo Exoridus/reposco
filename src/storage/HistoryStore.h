@@ -23,6 +23,7 @@ class HistoryStore final {
                  const HistoryLimits& limits = {});
     void record(const TextContent& text, std::int64_t copiedAt);
     void prune(std::int64_t now);
+    void clear();
     [[nodiscard]] std::vector<HistorySummary> summaries() const;
     [[nodiscard]] QByteArray original(std::int64_t id) const;
 

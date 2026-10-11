@@ -26,13 +26,17 @@ class HistoryWorker final : public QObject {
     void initialize();
     void record(const QString& text, quint64 token, quint64 generation);
     void setPreference(bool active);
+    void setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications);
+    void clear();
     void close();
   signals:
-    void ready(reposco::HistorySummaries rows, bool captureEnabled);
+    void ready(reposco::HistorySummaries rows, bool captureEnabled, bool sixDigits,
+               bool eightDigits, QStringList applications);
     void changed(reposco::HistorySummaries rows);
     void processed(quint64 token);
     void locked();
     void closed();
+    void cleared();
 
   private:
     void failClosed();
@@ -42,6 +46,8 @@ class HistoryWorker final : public QObject {
     std::unique_ptr<QSettings> preferences_;
     std::unique_ptr<HistoryStore> store_;
     QTimer* maintenance_ = nullptr;
+    bool six_digits_ = true;
+    bool eight_digits_ = false;
 };
 } // namespace reposco
 Q_DECLARE_METATYPE(reposco::HistorySummaries)

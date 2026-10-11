@@ -4,6 +4,8 @@
 #include <memory>
 
 namespace reposco {
+[[nodiscard]] bool isApplicationExcluded(const QString& executable, const QStringList& rules);
+
 class NativeClipboardMonitor final : public ClipboardMonitor {
     Q_OBJECT
   public:
@@ -12,6 +14,7 @@ class NativeClipboardMonitor final : public ClipboardMonitor {
     void start() override;
     void setActive(bool active, quint64 generation) override;
     void acknowledge(quint64 token) override;
+    void setExcludedApplications(const QStringList& applications) override;
     void stop() override;
 
   private:

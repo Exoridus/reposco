@@ -172,6 +172,12 @@ void HistoryStore::prune(std::int64_t now) {
     evict(database_.database_.get(), limits_, now);
     transaction.commit();
 }
+void HistoryStore::clear() {
+    Transaction transaction(database_);
+    database_.execute("DELETE FROM history");
+    transaction.commit();
+    database_.execute("PRAGMA shrink_memory");
+}
 std::vector<HistorySummary> HistoryStore::summaries() const {
     Statement query(database_.database_.get(), "SELECT id,substr(canonical,1,200),last_copied_ms "
                                                "FROM history ORDER BY ordinal DESC LIMIT 100");

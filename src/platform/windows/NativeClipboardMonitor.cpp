@@ -2,6 +2,9 @@
 
 #include "core/CapturePolicy.h"
 #include "core/ContentPolicy.h"
+#include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QThread>
 #include <Windows.h>
 #include <atomic>
@@ -10,7 +13,39 @@
 #include <objbase.h>
 
 namespace reposco {
+bool isApplicationExcluded(const QString& executable, const QStringList& rules) {
+    if (rules.isEmpty()) {
+        return false;
+    }
+    if (executable.isEmpty()) {
+        return true;
+    }
+    const auto path = QDir::cleanPath(QDir::fromNativeSeparators(executable));
+    for (const auto& rule : rules) {
+        if (path.compare(QDir::cleanPath(QDir::fromNativeSeparators(rule)), Qt::CaseInsensitive) ==
+            0) {
+            return true;
+        }
+    }
+    return false;
+}
 namespace {
+QString clipboardOwnerExecutable() {
+    DWORD processId = 0;
+    const auto owner = GetClipboardOwner();
+    if (!owner || !GetWindowThreadProcessId(owner, &processId) || !processId) {
+        return {};
+    }
+    const auto process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId);
+    if (!process) {
+        return {};
+    }
+    wchar_t buffer[32768];
+    DWORD length = static_cast<DWORD>(std::size(buffer));
+    const bool resolved = QueryFullProcessImageNameW(process, 0, buffer, &length) != FALSE;
+    CloseHandle(process);
+    return resolved ? QString::fromWCharArray(buffer, static_cast<qsizetype>(length)) : QString{};
+}
 constexpr UINT kControlMessage = WM_APP + 1;
 constexpr UINT_PTR kRetryTimer = 1;
 
@@ -36,11 +71,14 @@ class LockedGlobal final {
 
 class NativeTextSource final : public ClipboardTextSource {
   public:
-    NativeTextSource(UINT excluded, UINT ignore, UINT permission)
-        : excluded_(excluded), ignore_(ignore), permission_(permission) {
+    NativeTextSource(UINT excluded, UINT ignore, UINT permission, QStringList applications)
+        : excluded_(excluded), ignore_(ignore), permission_(permission),
+          applications_(std::move(applications)) {
     }
     bool hasExclusionMarker() const override {
-        return IsClipboardFormatAvailable(excluded_) || IsClipboardFormatAvailable(ignore_);
+        return IsClipboardFormatAvailable(excluded_) || IsClipboardFormatAvailable(ignore_) ||
+               (!applications_.isEmpty() &&
+                isApplicationExcluded(clipboardOwnerExecutable(), applications_));
     }
     bool hasHistoryPermission() const override {
         return IsClipboardFormatAvailable(permission_);
@@ -93,6 +131,7 @@ class NativeTextSource final : public ClipboardTextSource {
     UINT excluded_;
     UINT ignore_;
     UINT permission_;
+    QStringList applications_;
 };
 } // namespace
 
@@ -105,6 +144,14 @@ class NativeClipboardMonitor::Thread final : public QThread {
         generation_.store(generation);
         active_.store(active);
         wake(kControlMessage);
+    }
+    void setExcludedApplications(const QStringList& applications) {
+        const QMutexLocker guard(&rules_mutex_);
+        applications_ = applications;
+    }
+    QStringList excludedApplications() {
+        const QMutexLocker guard(&rules_mutex_);
+        return applications_;
     }
     void acknowledge(quint64 token) {
         acknowledged_.store(token);
@@ -217,7 +264,8 @@ class NativeClipboardMonitor::Thread final : public QThread {
             }
             TextCapture captured;
             try {
-                NativeTextSource source(excluded, ignore, permission);
+                NativeTextSource source(excluded, ignore, permission,
+                                        thread.excludedApplications());
                 captured = captureAllowedText(source);
             } catch (...) {
                 CloseClipboard();
@@ -278,6 +326,8 @@ class NativeClipboardMonitor::Thread final : public QThread {
             PostMessageW(window, message, 0, 0);
         }
     }
+    QMutex rules_mutex_;
+    QStringList applications_;
     NativeClipboardMonitor& monitor_;
     std::atomic<HWND> window_{nullptr};
     std::atomic<bool> active_{false};
@@ -301,6 +351,9 @@ void NativeClipboardMonitor::setActive(bool active, quint64 generation) {
 }
 void NativeClipboardMonitor::acknowledge(quint64 token) {
     thread_->acknowledge(token);
+}
+void NativeClipboardMonitor::setExcludedApplications(const QStringList& applications) {
+    thread_->setExcludedApplications(applications);
 }
 void NativeClipboardMonitor::stop() {
     thread_->stop();

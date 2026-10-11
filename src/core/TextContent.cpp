@@ -3,10 +3,25 @@
 #include <QCryptographicHash>
 
 namespace reposco {
-std::optional<TextContent> normalizeText(const QString& text) {
+std::optional<TextContent> normalizeText(const QString& text, bool excludeSixDigitCodes,
+                                         bool excludeEightDigitCodes) {
     if (text.size() > static_cast<qsizetype>(kMaxTextBytes) || !text.isValidUtf16() ||
         text.contains(QChar('\0'))) {
         return std::nullopt;
+    }
+    const auto classification = text.trimmed();
+    if ((excludeSixDigitCodes && classification.size() == 6) ||
+        (excludeEightDigitCodes && classification.size() == 8)) {
+        bool digits = true;
+        for (const auto character : classification) {
+            if (character < QLatin1Char('0') || character > QLatin1Char('9')) {
+                digits = false;
+                break;
+            }
+        }
+        if (digits) {
+            return std::nullopt;
+        }
     }
     const auto original = text.toUtf8();
     if (!acceptsText(

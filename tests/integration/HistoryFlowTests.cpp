@@ -1,4 +1,5 @@
 #include "platform/windows/KeyVault.h"
+#include "platform/windows/NativeClipboardMonitor.h"
 #include "ui/HistoryController.h"
 #include <QFile>
 #include <QTemporaryDir>
@@ -29,6 +30,71 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
 class HistoryFlowTests : public QObject {
     Q_OBJECT
   private slots:
+    void exactCodePolicyPersistsAndClearInvalidatesQueuedCapture() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        QVERIFY(controller.excludeSixDigitCodes());
+        QVERIFY(!controller.excludeEightDigitCodes());
+        controller.setCaptureActive(true);
+        quint64 token = 1;
+        for (const auto* value : {"123456", " 123456\r\n", "12345", "1234567", "code 123456"}) {
+            emit source->captured(value, token, source->generation);
+            QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, static_cast<int>(token), 5000);
+            ++token;
+        }
+        QCOMPARE(controller.model()->rowCount(), 3);
+        QVERIFY(controller.setCapturePolicy(false, true, {"C:/Synthetic/Vault.exe"}));
+        emit source->captured("123456", token, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, static_cast<int>(token), 5000);
+        QCOMPARE(controller.model()->rowCount(), 4);
+        ++token;
+        emit source->captured("12345678", token, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, static_cast<int>(token), 5000);
+        QCOMPARE(controller.model()->rowCount(), 4);
+        controller.clearHistory(false);
+        QCOMPARE(controller.model()->rowCount(), 4);
+        const auto oldGeneration = source->generation;
+        emit source->captured("queued synthetic", ++token, oldGeneration);
+        controller.clearHistory(true);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        QVERIFY(!controller.captureActive());
+        emit source->captured("stale synthetic", ++token, oldGeneration);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        QSignalSpy stopped(&controller, &reposco::HistoryController::stopped);
+        controller.shutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(stopped.count(), 1, 5000);
+        const auto key = reposco::loadDatabaseKey(directory.path(), true);
+        {
+            reposco::HistoryStore store(directory.filePath("history.db").toStdString(),
+                                        key->bytes());
+            QVERIFY(store.summaries().empty());
+        }
+        QVERIFY(!QFile::exists(directory.filePath("history.db-wal")));
+        reposco::HistoryController reopened(directory.path(), std::make_unique<SyntheticMonitor>());
+        reopened.start();
+        QTRY_VERIFY_WITH_TIMEOUT(reopened.available(), 5000);
+        QVERIFY(!reopened.captureActive());
+        QVERIFY(!reopened.excludeSixDigitCodes());
+        QVERIFY(reopened.excludeEightDigitCodes());
+        QCOMPARE(reopened.excludedApplications(), QStringList{"C:/Synthetic/Vault.exe"});
+        QVERIFY(!reopened.setCapturePolicy(true, false, {"Vault.exe"}));
+        QSignalSpy reopenedStopped(&reopened, &reposco::HistoryController::stopped);
+        reopened.shutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(reopenedStopped.count(), 1, 5000);
+    }
+    void applicationRulesMatchExactPathsAndFailClosedForUnknownOwners() {
+        const QStringList rules{"C:/Synthetic/Vault.exe"};
+        QVERIFY(reposco::isApplicationExcluded("c:\\synthetic\\VAULT.EXE", rules));
+        QVERIFY(reposco::isApplicationExcluded({}, rules));
+        QVERIFY(!reposco::isApplicationExcluded("C:/Elsewhere/Vault.exe", rules));
+        QVERIFY(!reposco::isApplicationExcluded("C:/Synthetic/Browser.exe", rules));
+        QVERIFY(!reposco::isApplicationExcluded({}, {}));
+    }
     void optInDedupPauseAndShutdown() {
         QTemporaryDir directory;
         auto monitor = std::make_unique<SyntheticMonitor>();

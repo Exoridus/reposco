@@ -1,5 +1,6 @@
 #include "HistoryController.h"
 #include "app/HistoryWorker.h"
+#include <QDir>
 
 namespace reposco {
 HistoryController::HistoryController(QString directory, std::unique_ptr<ClipboardMonitor> monitor,
@@ -45,19 +46,34 @@ void HistoryController::start() {
     connect(this, &HistoryController::recordRequested, worker_, &HistoryWorker::record);
     connect(this, &HistoryController::preferenceRequested, worker_, &HistoryWorker::setPreference);
     connect(this, &HistoryController::closeRequested, worker_, &HistoryWorker::close);
+    connect(this, &HistoryController::policyRequested, worker_, &HistoryWorker::setPolicy);
+    connect(this, &HistoryController::clearRequested, worker_, &HistoryWorker::clear);
+    connect(worker_, &HistoryWorker::cleared, this, [this] {
+        clearing_ = false;
+        if (!locked_ && !stopping_) {
+            available_ = true;
+            emit stateChanged();
+        }
+    });
     connect(worker_, &HistoryWorker::closed, &storage_thread_, &QThread::quit,
             Qt::DirectConnection);
-    connect(worker_, &HistoryWorker::ready, this, [this](HistorySummaries rows, bool active) {
-        if (locked_ || stopping_) {
-            return;
-        }
-        model_.replace(std::move(rows));
-        saved_active_ = active;
-        storage_ready_ = true;
-        refreshReady();
-    });
+    connect(worker_, &HistoryWorker::ready, this,
+            [this](HistorySummaries rows, bool active, bool sixDigits, bool eightDigits,
+                   const QStringList& applications) {
+                if (locked_ || stopping_) {
+                    return;
+                }
+                model_.replace(std::move(rows));
+                six_digits_ = sixDigits;
+                eight_digits_ = eightDigits;
+                applications_ = applications;
+                monitor_->setExcludedApplications(applications_);
+                saved_active_ = active;
+                storage_ready_ = true;
+                refreshReady();
+            });
     connect(worker_, &HistoryWorker::changed, this, [this](HistorySummaries rows) {
-        if (!locked_ && !stopping_) {
+        if (!locked_ && !stopping_ && !clearing_) {
             model_.replace(std::move(rows));
         }
     });
@@ -87,11 +103,53 @@ const QString& HistoryController::status() const {
     return status_;
 }
 void HistoryController::setCaptureActive(bool active) {
-    if (!available_ || stopping_) {
+    if (!available_ || stopping_ || clearing_) {
         return;
     }
     applyActive(active);
     emit preferenceRequested(active);
+}
+bool HistoryController::excludeSixDigitCodes() const {
+    return six_digits_;
+}
+bool HistoryController::excludeEightDigitCodes() const {
+    return eight_digits_;
+}
+QStringList HistoryController::excludedApplications() const {
+    return applications_;
+}
+bool HistoryController::setCapturePolicy(bool sixDigits, bool eightDigits,
+                                         const QStringList& applications) {
+    if (!available_ || stopping_ || clearing_ || applications.size() > 32) {
+        return false;
+    }
+    for (const auto& path : applications) {
+        if (path.size() > 512 || !QDir::isAbsolutePath(path) ||
+            !path.endsWith(".exe", Qt::CaseInsensitive)) {
+            return false;
+        }
+    }
+    const bool resume = active_;
+    applyActive(false);
+    six_digits_ = sixDigits;
+    eight_digits_ = eightDigits;
+    applications_ = applications;
+    monitor_->setExcludedApplications(applications_);
+    emit policyRequested(sixDigits, eightDigits, applications);
+    applyActive(resume);
+    return true;
+}
+void HistoryController::clearHistory(bool confirmed) {
+    if (!confirmed || !available_ || stopping_ || clearing_) {
+        return;
+    }
+    clearing_ = true;
+    applyActive(false);
+    available_ = false;
+    model_.replace({});
+    emit preferenceRequested(false);
+    emit clearRequested();
+    emit stateChanged();
 }
 void HistoryController::applyActive(bool active) {
     gate_->active.store(false);

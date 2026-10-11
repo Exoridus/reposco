@@ -48,7 +48,19 @@ void HistoryWorker::initialize() {
             }
         });
         maintenance_->start();
-        emit ready(store_->summaries(), captureEnabled);
+        six_digits_ = preferences_->value("excludeSixDigitCodes", true).toBool();
+        eight_digits_ = preferences_->value("excludeEightDigitCodes", false).toBool();
+        const auto applications = preferences_->value("excludedApplications").toStringList();
+        if (applications.size() > 32) {
+            throw std::runtime_error("Application exclusions exceed the supported budget");
+        }
+        for (const auto& path : applications) {
+            if (path.size() > 512 || !QDir::isAbsolutePath(path) ||
+                !path.endsWith(".exe", Qt::CaseInsensitive)) {
+                throw std::runtime_error("Application exclusion is invalid");
+            }
+        }
+        emit ready(store_->summaries(), captureEnabled, six_digits_, eight_digits_, applications);
     } catch (const std::exception&) {
         failClosed();
     }
@@ -56,7 +68,7 @@ void HistoryWorker::initialize() {
 void HistoryWorker::record(const QString& text, quint64 token, quint64 generation) {
     try {
         if (store_ && gate_->permits(generation)) {
-            const auto normalized = normalizeText(text);
+            const auto normalized = normalizeText(text, six_digits_, eight_digits_);
             if (normalized && gate_->permits(generation)) {
                 store_->record(*normalized, QDateTime::currentMSecsSinceEpoch());
                 emit changed(store_->summaries());
@@ -74,6 +86,31 @@ void HistoryWorker::setPreference(bool active) {
     preferences_->setValue("captureEnabled", active);
     preferences_->sync();
     if (preferences_->status() != QSettings::NoError) {
+        failClosed();
+    }
+}
+void HistoryWorker::setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications) {
+    if (!preferences_ || !store_) {
+        return;
+    }
+    six_digits_ = sixDigits;
+    eight_digits_ = eightDigits;
+    preferences_->setValue("excludeSixDigitCodes", sixDigits);
+    preferences_->setValue("excludeEightDigitCodes", eightDigits);
+    preferences_->setValue("excludedApplications", applications);
+    preferences_->sync();
+    if (preferences_->status() != QSettings::NoError) {
+        failClosed();
+    }
+}
+void HistoryWorker::clear() {
+    try {
+        if (store_) {
+            store_->clear();
+            emit changed({});
+            emit cleared();
+        }
+    } catch (const std::exception&) {
         failClosed();
     }
 }

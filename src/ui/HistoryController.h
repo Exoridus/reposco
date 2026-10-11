@@ -19,6 +19,9 @@ class HistoryController final : public QObject {
     Q_PROPERTY(bool captureActive READ captureActive NOTIFY stateChanged)
     Q_PROPERTY(bool locked READ locked NOTIFY stateChanged)
     Q_PROPERTY(QString status READ status NOTIFY stateChanged)
+    Q_PROPERTY(bool excludeSixDigitCodes READ excludeSixDigitCodes NOTIFY stateChanged)
+    Q_PROPERTY(bool excludeEightDigitCodes READ excludeEightDigitCodes NOTIFY stateChanged)
+    Q_PROPERTY(QStringList excludedApplications READ excludedApplications NOTIFY stateChanged)
   public:
     HistoryController(QString directory, std::unique_ptr<ClipboardMonitor> monitor,
                       QObject* parent = nullptr);
@@ -30,6 +33,12 @@ class HistoryController final : public QObject {
     [[nodiscard]] bool locked() const;
     [[nodiscard]] const QString& status() const;
     Q_INVOKABLE void setCaptureActive(bool active);
+    [[nodiscard]] bool excludeSixDigitCodes() const;
+    [[nodiscard]] bool excludeEightDigitCodes() const;
+    [[nodiscard]] QStringList excludedApplications() const;
+    Q_INVOKABLE bool setCapturePolicy(bool sixDigits, bool eightDigits,
+                                      const QStringList& applications);
+    Q_INVOKABLE void clearHistory(bool confirmed);
     void shutdown();
   signals:
     void stateChanged();
@@ -37,6 +46,8 @@ class HistoryController final : public QObject {
     void recordRequested(QString text, quint64 token, quint64 generation);
     void preferenceRequested(bool active);
     void closeRequested();
+    void policyRequested(bool sixDigits, bool eightDigits, QStringList applications);
+    void clearRequested();
 
   private:
     void applyActive(bool active);
@@ -44,6 +55,10 @@ class HistoryController final : public QObject {
     void failClosed();
     void finishShutdown();
     void acceptCapture(const QString& text, quint64 token, quint64 generation);
+    bool six_digits_ = true;
+    bool eight_digits_ = false;
+    bool clearing_ = false;
+    QStringList applications_;
     QString directory_;
     std::unique_ptr<ClipboardMonitor> monitor_;
     HistoryModel model_;

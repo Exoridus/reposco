@@ -13,3 +13,24 @@ The worker creates a 32-byte BCrypt key and atomically persists a versioned user
 The database uses DELETE journaling, FULL synchronization, secure_delete and in-memory temporary storage. WAL is not approved. Retention/count/logical-byte eviction is transactional; physical file size and SSD secure deletion are not guaranteed. Disk-full fault injection, recovery UX, richer payload artifacts and full hardening remain future work.
 
 QML receives bounded PlainText summaries, never arbitrary image/resource markup. Future rich previews must block implicit network/file/UNC reads. Portable-core ASan/UBSan tests do not cover the Windows desktop or crypto stack. No security audit, code-signing identity, recovery guarantee or verified reporting channel exists yet.
+
+Exact six-ASCII-digit text is excluded by default after Unicode whitespace trimming,
+before UTF-8 identity/hash construction; optional eight-digit exclusion is separate.
+Users may disable these rules; they also exclude legitimate standalone numbers.
+No rule clears or writes the OS clipboard. Existing stored secrets are not removed
+by a later clipboard clear or a policy change.
+
+Configured native application exclusions match full executable paths, case-insensitively,
+from the clipboard owner's process before payload reads. With rules configured,
+missing/unreadable owner provenance fails closed. Paths are bounded to 32 entries
+of 512 characters. Owner identity is not an authenticated content provenance claim:
+browser extensions cannot be distinguished reliably and unmarked passwords remain
+capturable. No broad browser exclusion or entropy-based password detector is used.
+
+Confirmed history clearing pauses capture, invalidates queued generations and deletes
+all original/canonical/fingerprint/metadata rows transactionally with secure_delete
+in the existing encrypted DELETE-journal database. No WAL is enabled. Keys and
+opt-in settings are retained; capture stays paused. UI summaries are dropped and
+SQLCipher page memory is released where supported. Logical deletion and releasing
+application caches do not guarantee erasure of process-memory copies, pagefiles,
+backups, crash dumps or physical SSD cells.

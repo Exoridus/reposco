@@ -10,6 +10,18 @@
 class HistoryTests : public QObject {
     Q_OBJECT
   private slots:
+    void exactCodesAreExcludedBeforeIdentity() {
+        for (const auto& value : {QString("123456"), QString(" 123456\r\n"),
+                                  QString::fromUtf8("\xC2\xA0"
+                                                    "123456"
+                                                    "\xE2\x80\x83")}) {
+            QVERIFY(!reposco::normalizeText(value));
+        }
+        for (const auto* value : {"12345", "1234567", "code 123456", "12345678"}) {
+            QVERIFY(reposco::normalizeText(value));
+        }
+        QVERIFY(reposco::normalizeText(QString::fromUtf8("１２３４５６")));
+    }
     void comparisonDoesNotChangeOriginal() {
         const auto text = reposco::normalizeText(QString::fromUtf8(" \r\ne\xCC\x81\rA \t"));
         QVERIFY(text);

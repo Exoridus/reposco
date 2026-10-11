@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 namespace reposco {
 class ClipboardMonitor : public QObject {
@@ -12,6 +13,8 @@ class ClipboardMonitor : public QObject {
     // Activation never reads the clipboard that was present before the new generation.
     virtual void setActive(bool active, quint64 generation) = 0;
     virtual void acknowledge(quint64 token) = 0;
+    virtual void setExcludedApplications(const QStringList&) {
+    }
     virtual void stop() = 0;
   signals:
     void ready();
