@@ -37,6 +37,7 @@ class IntegrationTests : public QObject {
             reposco::EncryptedDatabase database(path, key);
             QVERIFY(database.cipherVersion().starts_with("4.19.0"));
             QCOMPARE(database.cipherProvider(), std::string("openssl"));
+            QVERIFY(database.scalar("PRAGMA cipher_provider_version").starts_with("OpenSSL 3.5.9"));
             database.execute("CREATE TABLE proof(value TEXT NOT NULL)");
             database.execute("INSERT INTO proof VALUES('synthetic-only')");
             QCOMPARE(database.scalar("SELECT value FROM proof"), std::string("synthetic-only"));

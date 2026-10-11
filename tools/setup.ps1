@@ -1,7 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
-git submodule update --init --recursive
+git submodule update --init third_party/openssl third_party/sqlcipher
+if ($LASTEXITCODE -ne 0) { throw 'Dependency checkout failed' }
+git submodule update --init --recursive third_party/qwindowkit
 if ($LASTEXITCODE -ne 0) { throw 'Dependency checkout failed' }
 $perlRoot = Join-Path $repoRoot 'build/tools/perl'
 if (-not (Test-Path "$perlRoot/perl/bin/perl.exe")) {
@@ -13,5 +15,9 @@ if (-not (Test-Path "$perlRoot/perl/bin/perl.exe")) {
     }
     Expand-Archive -LiteralPath $archive -DestinationPath $perlRoot -Force
 }
-& "$perlRoot/perl/bin/perl.exe" -v
-if ($LASTEXITCODE -ne 0) { throw 'Perl validation failed' }
+$oldLocale = $env:LC_ALL
+try {
+    $env:LC_ALL = 'C'
+    & "$perlRoot/perl/bin/perl.exe" -v
+    if ($LASTEXITCODE -ne 0) { throw 'Perl validation failed' }
+} finally { $env:LC_ALL = $oldLocale }

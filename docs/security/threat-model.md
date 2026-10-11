@@ -8,4 +8,4 @@ Same-user/elevated malware, clipboard readers, paste destinations, screen captur
 
 Before capture, implement bounded STA capture, exclusions before reads, safe replay sequencing, consent, random keys/versioned DPAPI envelopes, zeroization, transactions and locked-state recovery. Test journal/WAL/temp/index/thumbnail artifacts and corruption/disk-full. The proof uses DELETE journaling and memory temporary storage; WAL is not approved.
 
-UI text is fixed plain text. Future rich previews must block implicit network/file/UNC reads and enforce budgets. No sanitizer, security audit, code-signing identity, recovery guarantee or verified reporting channel exists yet.
+UI text is fixed plain text. Future rich previews must block implicit network/file/UNC reads and enforce budgets. Portable-core ASan/UBSan tests do not cover the Windows desktop or crypto stack. No security audit, code-signing identity, recovery guarantee or verified reporting channel exists yet.

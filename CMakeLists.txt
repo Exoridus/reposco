@@ -13,6 +13,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(REPOSCO_BUILD_APP "Build the Windows desktop integration proof" ${WIN32})
 option(REPOSCO_USE_SCCACHE "Use the optional sccache compiler launcher" OFF)
 option(REPOSCO_SANITIZERS "Enable ASan/UBSan for portable targets" OFF)
+if(REPOSCO_SANITIZERS
+   AND (MSVC
+        OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
+        OR NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$"))
+  message(FATAL_ERROR "ASan/UBSan presets require GCC or Clang with the GNU frontend")
+endif()
 include(CTest)
 include(cmake/Warnings.cmake)
 
@@ -37,6 +43,7 @@ if(REPOSCO_BUILD_APP)
      AND EXISTS "C:/Qt/6.12.0/msvc2022_64")
     list(APPEND CMAKE_PREFIX_PATH "C:/Qt/6.12.0/msvc2022_64")
   endif()
+  set(CMAKE_INSTALL_BINDIR ".")
   find_package(
     Qt6 6.12.0 EXACT REQUIRED
     COMPONENTS Core

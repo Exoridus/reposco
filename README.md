@@ -5,7 +5,7 @@ An offline, privacy-oriented clipboard manager for Windows, built with C++20 and
 **Status: 0.1.0-dev engineering foundation.** The executable provides a QWindowKit palette, SoftGlass fallback, tray, Win+Alt+V hotkey and clean shutdown. Clipboard capture and history are not implemented. Synthetic tests exercise SQLCipher encryption and Windows user-scope DPAPI.
 
 ```powershell
-git clone --recurse-submodules https://github.com/Exoridus/reposco.git
+git clone https://github.com/Exoridus/reposco.git
 cd reposco
 ./tools/dev.ps1 setup
 ./tools/dev.ps1 build

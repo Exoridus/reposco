@@ -1,5 +1,21 @@
 include(ExternalProject)
 find_package(Git REQUIRED)
+file(READ "${PROJECT_SOURCE_DIR}/third_party/deps.lock.json" dependencyLock)
+string(
+  JSON
+  opensslRevision
+  GET
+  "${dependencyLock}"
+  sources
+  4
+  revision)
+execute_process(
+  COMMAND "${GIT_EXECUTABLE}" -C "${PROJECT_SOURCE_DIR}/third_party/openssl" rev-parse HEAD
+  OUTPUT_VARIABLE opensslHead
+  OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+if(NOT opensslHead STREQUAL opensslRevision)
+  message(FATAL_ERROR "OpenSSL checkout does not match the dependency lock")
+endif()
 set(REPOSCO_DEPS_ROOT "${PROJECT_BINARY_DIR}/deps")
 set(opensslSource "${PROJECT_SOURCE_DIR}/third_party/openssl")
 set(opensslInstall "${REPOSCO_DEPS_ROOT}/openssl-install")
@@ -10,6 +26,8 @@ find_program(
   NO_DEFAULT_PATH REQUIRED)
 find_program(REPOSCO_NMAKE NAMES nmake REQUIRED)
 file(MAKE_DIRECTORY "${opensslInstall}/include")
+configure_file("${PROJECT_SOURCE_DIR}/third_party/deps.lock.json"
+               "${REPOSCO_DEPS_ROOT}/openssl-revision.json" COPYONLY)
 ExternalProject_Add(
   reposco_openssl_build
   SOURCE_DIR "${opensslSource}"
@@ -24,6 +42,8 @@ ExternalProject_Add(
   LOG_CONFIGURE ON
   LOG_BUILD ON
   LOG_INSTALL ON)
+ExternalProject_Add_StepDependencies(reposco_openssl_build configure
+                                     "${REPOSCO_DEPS_ROOT}/openssl-revision.json")
 add_library(reposco_crypto STATIC IMPORTED GLOBAL)
 set_target_properties(
   reposco_crypto

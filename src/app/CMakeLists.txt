@@ -2,7 +2,7 @@ qt_add_library(reposco_ui STATIC ../ui/DesktopSession.cpp ../ui/DesktopSession.h
 target_include_directories(reposco_ui PUBLIC "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(
   reposco_ui
-  PUBLIC Qt6::Quick Qt6::Widgets reposco_platform_windows
+  PUBLIC Qt6::Quick Qt6::Widgets Qt6::Svg reposco_platform_windows
   PRIVATE QWKQuick)
 reposco_owned_target(reposco_ui)
 set_source_files_properties(../../qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)

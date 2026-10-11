@@ -1,5 +1,19 @@
 install(TARGETS reposco RUNTIME DESTINATION . COMPONENT Runtime)
-qt_generate_deploy_qml_app_script(TARGET reposco OUTPUT_SCRIPT deployScript)
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION ".")
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+include(InstallRequiredSystemLibraries)
+qt_generate_deploy_qml_app_script(
+  TARGET
+  reposco
+  OUTPUT_SCRIPT
+  deployScript
+  NO_TRANSLATIONS
+  NO_COMPILER_RUNTIME
+  EXCLUDE_PLUGIN_TYPES
+  qmltooling
+  DEPLOY_TOOL_OPTIONS
+  --qmldir
+  "${PROJECT_SOURCE_DIR}/qml")
 install(SCRIPT "${deployScript}" COMPONENT Runtime)
 install(
   FILES "${PROJECT_SOURCE_DIR}/LICENSE" "${PROJECT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"

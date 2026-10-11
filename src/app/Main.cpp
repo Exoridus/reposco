@@ -1,5 +1,6 @@
 #include "ui/DesktopSession.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QIcon>
 #include <QQuickWindow>
@@ -24,7 +25,13 @@ int main(int argc, char* argv[]) {
     }
     if (application.arguments().contains("--smoke")) {
         session.window()->show();
-        QTimer::singleShot(1500, &application, &QApplication::quit);
+        QTimer::singleShot(1500, &session, [&session] {
+            if (auto* quitAction = session.findChild<QAction*>("quitAction")) {
+                quitAction->trigger();
+            } else {
+                QApplication::exit(2);
+            }
+        });
     }
     return application.exec();
 }

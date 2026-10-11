@@ -1,4 +1,4 @@
-param([string]$QtRoot = $env:REPOSCO_QT_ROOT)
+param([string]$QtRoot = $env:REPOSCO_QT_ROOT, [switch]$Installer)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = Split-Path $PSScriptRoot -Parent
@@ -11,6 +11,9 @@ if (Test-Path $stage) {
 cmake --install build/windows-release --prefix $stage --component Runtime
 if ($LASTEXITCODE -ne 0) { throw 'Deployment failed' }
 if (-not (Test-Path "$stage/reposco.exe") -or -not (Test-Path "$stage/Qt6Core.dll")) { throw 'Incomplete deployment' }
+foreach ($runtime in @('msvcp140.dll', 'vcruntime140.dll')) {
+    if (-not (Test-Path "$stage/$runtime")) { throw "Missing application-local runtime: $runtime" }
+}
 if (-not $QtRoot) { $QtRoot = $env:QT_ROOT_DIR }
 $qtLicenses = Join-Path $repoRoot 'packaging/licenses/Qt'
 if (-not (Test-Path $qtLicenses)) { throw 'Qt SDK license texts missing' }
@@ -23,7 +26,7 @@ $oldPlugins = $env:QT_PLUGIN_PATH
 $oldImports = $env:QML_IMPORT_PATH
 try {
     $env:PATH = "$env:SystemRoot/System32;$env:SystemRoot"
-    $env:QT_PLUGIN_PATH = "$stage/platforms"
+    $env:QT_PLUGIN_PATH = "$stage/plugins"
     $env:QML_IMPORT_PATH = "$stage/qml"
     $process = Start-Process -FilePath "$stage/reposco.exe" -ArgumentList '--smoke' -PassThru -WindowStyle Hidden
     if (-not $process.WaitForExit(15000)) { $process.Kill(); throw 'Packaged app timed out' }
@@ -38,3 +41,8 @@ Compress-Archive -Path "$stage/*" -DestinationPath $zip -Force
 $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 [IO.File]::WriteAllText("$zip.sha256", "$hash  $([IO.Path]::GetFileName($zip))`n")
 Write-Host "Package smoke passed. ZIP bytes: $((Get-Item $zip).Length); SHA256: $hash"
+if ($Installer) {
+    if (-not (Get-Command makensis.exe -ErrorAction SilentlyContinue)) { throw 'NSIS 3 required for -Installer' }
+    & makensis.exe "/DSTAGE_ROOT=$stage" "/DOUTPUT=$repoRoot/build/Reposco-0.1.0-dev-setup.exe" packaging/reposco.nsi
+    if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+}

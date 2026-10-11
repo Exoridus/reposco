@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repoRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $repoRoot
+$env:PATH = "$repoRoot/build/tools/quality;$repoRoot/build/tools/quality/venv/Scripts;$env:PATH"
 function Invoke-Tool([string]$Program, [string[]]$Arguments) {
     & $Program @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Program failed ($LASTEXITCODE)" }
@@ -53,7 +54,8 @@ if ($Mode -eq 'Analysis') {
     if ($ownedSources.Count -eq 0) { throw 'No owned compile commands found' }
     foreach ($source in $ownedSources) { Invoke-Tool clang-tidy @('-p', $database, $source, '--extra-arg=/EHsc') }
     $cppcheck = Get-Command cppcheck -ErrorAction SilentlyContinue
-    $cppcheckPath = if ($cppcheck) { $cppcheck.Source } else { 'C:/Program Files/Cppcheck/cppcheck.exe' }
+    $localCppcheck = Get-ChildItem "$repoRoot/build/tools/quality/cppcheck" -Recurse -Filter cppcheck.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    $cppcheckPath = if ($localCppcheck) { $localCppcheck.FullName } elseif ($cppcheck) { $cppcheck.Source } else { 'C:/Program Files/Cppcheck/cppcheck.exe' }
     $ownedDatabase = Join-Path $database 'owned_compile_commands.json'
     [IO.File]::WriteAllText($ownedDatabase, (ConvertTo-Json -InputObject $ownedCommands -Depth 8))
     Invoke-Tool $cppcheckPath @('--enable=warning,performance,portability', '--std=c++20', '--error-exitcode=1', '--library=qt', '--library=windows', '--inline-suppr', '--suppress=missingIncludeSystem', "--project=$ownedDatabase")

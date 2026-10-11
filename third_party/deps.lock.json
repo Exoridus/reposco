@@ -6,7 +6,7 @@
     { "name": "qmsetup", "path": "third_party/qwindowkit/qmsetup", "repository": "https://github.com/stdware/qmsetup", "revision": "85c6c3c783be8af8d3f2fa492748a82da8ec9bad", "license": "MIT", "licenseFile": "LICENSE", "buildOnly": true },
     { "name": "syscmdline", "path": "third_party/qwindowkit/qmsetup/src/syscmdline", "repository": "https://github.com/SineStriker/syscmdline", "revision": "5a67673ff96acbfd894ea653fbaca872fded758a", "license": "MIT", "licenseFile": "LICENSE", "buildOnly": true },
     { "name": "SQLCipher", "version": "4.19.0", "path": "third_party/sqlcipher", "repository": "https://github.com/sqlcipher/sqlcipher", "revision": "c4b275a47932888216bade83aff2bbc73df0ff85", "license": "BSD-3-Clause", "licenseFile": "LICENSE.md" },
-    { "name": "OpenSSL", "version": "3.5.4", "path": "third_party/openssl", "repository": "https://github.com/openssl/openssl", "revision": "c1eeb9406b6142148f267594197d853403d10208", "license": "Apache-2.0", "licenseFile": "LICENSE.txt" }
+    { "name": "OpenSSL", "version": "3.5.9", "path": "third_party/openssl", "repository": "https://github.com/openssl/openssl", "revision": "45e844fa2a14ec92d146bd8f5778ac130b6625fb", "license": "Apache-2.0", "licenseFile": "LICENSE.txt" }
   ],
   "buildTools": {
     "perl": { "version": "5.40.5.1", "url": "https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54051_64bit/strawberry-perl-5.40.5.1-64bit-portable.zip", "sha256": "6619fe7eeef921ccddb4aac3972fb602a0c690a3074205b863ade998d7bc79a6", "license": "Artistic-1.0-Perl OR GPL-1.0-or-later", "shipped": false },
@@ -14,6 +14,7 @@
     "clang-tidy": "22.1.0",
     "cppcheck": "2.21.0",
     "cmakelang": "0.6.13",
+    "PyYAML": "6.0.3",
     "actionlint": "1.7.12",
     "zizmor": "1.30.1"
   }

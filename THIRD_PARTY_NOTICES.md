@@ -8,7 +8,7 @@ Exact recursive source revisions and license files are recorded in [the dependen
 | QWindowKit | 1.5.0 | Apache-2.0 | Static Core/Quick |
 | SQLCipher | 4.19.0 | BSD-3-Clause | Static library |
 | SQLite upstream portions | See SQLCipher source VERSION | Public domain | Included in SQLCipher |
-| OpenSSL | 3.5.4 | Apache-2.0 | Static crypto |
+| OpenSSL | 3.5.9 | Apache-2.0 | Static crypto |
 | qmsetup and syscmdline | Manifest revisions | MIT | Build-time only |
 | Strawberry Perl | 5.40.5.1 | Perl Artistic/GPL; bundled tools have their own terms | Build-time only |
 

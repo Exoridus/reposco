@@ -41,19 +41,27 @@ if (-not $QtRoot) {
 }
 if (-not $QtRoot -or -not (Test-Path "$QtRoot/bin/qmake.exe")) { throw 'Qt 6.12.0 missing. Pass -QtRoot <SDK path>' }
 $QtRoot = (Resolve-Path $QtRoot).Path
+$qtVersion = & "$QtRoot/bin/qmake.exe" -query QT_VERSION
+if ($LASTEXITCODE -ne 0 -or $qtVersion -ne (Get-Content .qt-version -Raw).Trim()) { throw 'Qt SDK version does not match .qt-version' }
 $env:PATH = "$QtRoot/bin;$env:PATH"
 $env:QT_PLUGIN_PATH = "$QtRoot/plugins"
 $env:QML_IMPORT_PATH = "$QtRoot/qml"
 $env:REPOSCO_QT_ROOT = $QtRoot
 
 function Build-Preset([string]$Preset) {
-    $configureArgs = @('--preset', $Preset, "-DCMAKE_PREFIX_PATH=$QtRoot")
-    if ($UseSccache) { $configureArgs += '-DREPOSCO_USE_SCCACHE=ON' }
-    Invoke-Checked cmake $configureArgs
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    Invoke-Checked cmake @('--build', '--preset', $Preset, '--parallel')
-    Write-Host "$Preset build seconds: $($clock.Elapsed.TotalSeconds.ToString('F2'))"
-    if ($UseSccache) { Invoke-Checked sccache @('--show-stats') }
+    $oldLocale = $env:LC_ALL
+    try {
+        # Strawberry Perl does not accept Unix UTF-8 locale names on Windows.
+        $env:LC_ALL = 'C'
+        $configureArgs = @('--preset', $Preset, "-DCMAKE_PREFIX_PATH=$QtRoot")
+        $configureArgs += "-DREPOSCO_USE_SCCACHE=$($UseSccache.IsPresent.ToString().ToUpperInvariant())"
+        Invoke-Checked cmake $configureArgs
+        $clock = [Diagnostics.Stopwatch]::StartNew()
+        Invoke-Checked cmake @('--build', '--preset', $Preset, '--parallel')
+        Write-Host "$Preset build seconds: $($clock.Elapsed.TotalSeconds.ToString('F2'))"
+        if ($env:GITHUB_STEP_SUMMARY) { "$Preset compile seconds: $($clock.Elapsed.TotalSeconds.ToString('F2'))" >> $env:GITHUB_STEP_SUMMARY }
+        if ($UseSccache) { Invoke-Checked sccache @('--show-stats') }
+    } finally { $env:LC_ALL = $oldLocale }
 }
 
 switch ($Command) {
