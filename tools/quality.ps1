@@ -49,7 +49,13 @@ if ($Mode -eq 'Fast') {
 if ($Mode -eq 'Analysis') {
     $database = Join-Path $repoRoot 'build/windows-debug'
     $commands = Get-Content "$database/compile_commands.json" -Raw | ConvertFrom-Json
-    $ownedCommands = @($commands | Where-Object { $_.file.StartsWith("$repoRoot/src/".Replace('\', '/')) -or $_.file.StartsWith("$repoRoot/tests/".Replace('\', '/')) })
+    $sourcePrefix = "$repoRoot/src/".Replace('\', '/')
+    $testPrefix = "$repoRoot/tests/".Replace('\', '/')
+    $ownedCommands = @($commands | Where-Object {
+        $file = $_.file.Replace('\', '/')
+        $file.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase) -or
+            $file.StartsWith($testPrefix, [StringComparison]::OrdinalIgnoreCase)
+    })
     $ownedSources = @($ownedCommands | ForEach-Object file | Sort-Object -Unique)
     if ($ownedSources.Count -eq 0) { throw 'No owned compile commands found' }
     foreach ($source in $ownedSources) { Invoke-Tool clang-tidy @('-p', $database, $source, '--extra-arg=/EHsc') }
