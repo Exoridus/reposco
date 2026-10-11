@@ -127,7 +127,7 @@ jobs:
           OBJECTS_HIT: ${{ steps.objects-cache.outputs.cache-hit }}
         run: |
           "Qt cache=$env:QT_HIT; dependencies=$env:DEPS_HIT; objects=$env:OBJECTS_HIT" >> $env:GITHUB_STEP_SUMMARY
-          sccache --show-stats
+          if (Get-Command sccache -ErrorAction SilentlyContinue) { sccache --show-stats }
       - name: Failure logs
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -192,7 +192,8 @@ jobs:
           key: ${{ steps.objects-cache.outputs.cache-primary-key }}
       - name: Compiler cache measurements
         if: always()
-        run: sccache --show-stats
+        run: |
+          if (Get-Command sccache -ErrorAction SilentlyContinue) { sccache --show-stats }
 
   portable-core:
     name: Portable Core
