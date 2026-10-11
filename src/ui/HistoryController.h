@@ -17,6 +17,8 @@ class HistoryController final : public QObject {
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     Q_PROPERTY(QString searchQuery READ searchQuery WRITE setSearchQuery NOTIFY searchChanged)
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
+    Q_PROPERTY(bool replayBusy READ replayBusy NOTIFY replayChanged)
+    Q_PROPERTY(QString replayStatus READ replayStatus NOTIFY replayChanged)
     Q_PROPERTY(int retentionDays READ retentionDays NOTIFY stateChanged)
     Q_PROPERTY(bool available READ available NOTIFY stateChanged)
     Q_PROPERTY(bool captureActive READ captureActive NOTIFY stateChanged)
@@ -49,8 +51,17 @@ class HistoryController final : public QObject {
     Q_INVOKABLE void selectRow(int row);
     [[nodiscard]] int retentionDays() const;
     Q_INVOKABLE void setRetentionDays(int days, bool confirmed);
+    [[nodiscard]] bool replayBusy() const;
+    [[nodiscard]] const QString& replayStatus() const;
+    Q_INVOKABLE void replaySelected(bool copyOnly);
+    void cancelReplay();
+    void setReplayStatus(const QString& status);
     void shutdown();
   signals:
+    void replayChanged();
+    void replayInvalidated();
+    void replayRequested(qint64 id, quint64 revision);
+    void replayCompleted(quint32 sequence, bool copyOnly);
     void stateChanged();
     void searchChanged();
     void previewChanged();
@@ -73,6 +84,11 @@ class HistoryController final : public QObject {
     void requestSearch();
     void requestPreview();
     void resetPreview();
+    quint64 replay_revision_ = 0;
+    bool replay_busy_ = false;
+    bool replay_pending_ = false;
+    bool replay_copy_only_ = false;
+    QString replay_status_;
     QString search_query_;
     QString preview_;
     qint64 selected_id_ = 0;

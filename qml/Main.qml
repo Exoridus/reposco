@@ -137,7 +137,19 @@ Window {
                 tokens: paletteStyle
 
                 Keys.onDownPressed: root.moveSelection(1)
+                Keys.onEnterPressed: function (event) {
+                    if (root.desktopSession) {
+                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0);
+                        event.accepted = true;
+                    }
+                }
                 Keys.onEscapePressed: root.hide()
+                Keys.onReturnPressed: function (event) {
+                    if (root.desktopSession) {
+                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0);
+                        event.accepted = true;
+                    }
+                }
                 Keys.onUpPressed: root.moveSelection(-1)
                 onTextChanged: {
                     if (root.historyController)
@@ -202,17 +214,11 @@ Window {
                 Layout.preferredHeight: 20
 
                 Text {
-                    color: paletteStyle.secondary
-                    font.pixelSize: 11
-                    text: qsTr("↑ ↓ Select    Esc Close")
-                }
-                Item {
                     Layout.fillWidth: true
-                }
-                Text {
                     color: paletteStyle.secondary
+                    elide: Text.ElideRight
                     font.pixelSize: 11
-                    text: qsTr("View only · Paste not available")
+                    text: root.historyController && root.historyController.replayStatus.length > 0 ? root.historyController.replayStatus : qsTr("↑ ↓ Select    Enter Paste text    Ctrl+Enter Copy    Esc Close")
                 }
             }
         }

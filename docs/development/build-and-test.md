@@ -41,3 +41,18 @@ overrides the local default; `./tools/dev.ps1 build -BuildJobs 1` minimizes loca
 sequential by default. Prefer a focused `-TestFilter` while iterating; reserve
 full analysis and packaging for integrated completion. Direct CMake invocations
 retain their normal parallelism unless `--parallel <count>` is supplied.
+
+## Coordinated interactive diagnostics
+
+Only with current user authorization and a free Windows desktop, set
+`REPOSCO_COORDINATED_DESKTOP=1` for the test process. Run desktop_tests with
+`coordinatedNativeHotkeyKeepsPaletteOpen` or
+`coordinatedTextReplayIntoOwnedNativeFixture`. The latter creates its own native
+EDIT in a separate temporary test process. They send Windows key events and must
+never run concurrently with another desktop/input test.
+
+For native capture/OTP/self-write checks, native_capture_tests accepts
+`--coordinated-clipboard exactCodesStayInPrivateClipboardAndOutOfHistory` only
+with that environment flag. This deliberately overwrites the interactive
+clipboard with synthetic values; it never saves/readbacks the previous clipboard.
+The flag is not set by dev.ps1 or CI. Isolated tests never fall back to this mode.

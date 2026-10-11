@@ -1,14 +1,21 @@
+#include "platform/windows/KeyVault.h"
+#include "platform/windows/NativeClipboardMonitor.h"
 #include "ui/DesktopSession.h"
 #include "ui/HistoryController.h"
 
 #include <QApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QLoggingCategory>
+#include <QProcess>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QTemporaryDir>
+#include <QTextStream>
+#include <QTimer>
 #include <QtTest>
 #include <Windows.h>
+#include <array>
 
 namespace {
 QStringList lifecycleMessages;
@@ -31,6 +38,11 @@ QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
 class SyntheticDesktopMonitor final : public reposco::ClipboardMonitor {
   public:
     quint64 generation = 0;
+    quint64 restoreToken = 0;
+    bool restoreText(const QString&, quint64 token) override {
+        restoreToken = token;
+        return true;
+    }
     void start() override {
         emit ready();
     }
@@ -48,6 +60,209 @@ class SyntheticDesktopMonitor final : public reposco::ClipboardMonitor {
 class DesktopTests : public QObject {
     Q_OBJECT
   private slots:
+    void dispatcherHotkeyAcceptsAbsentResultPointer() {
+        reposco::GlobalHotkey hotkey;
+        QVERIFY(hotkey.registerDefault());
+        QSignalSpy activated(&hotkey, &reposco::GlobalHotkey::activated);
+        MSG message{};
+        message.message = WM_HOTKEY;
+        message.wParam = 0x5250;
+        QVERIFY(hotkey.nativeEventFilter("windows_dispatcher_MSG", &message, nullptr));
+        QCOMPARE(activated.count(), 1);
+    }
+    void coordinatedNativeHotkeyKeepsPaletteOpen() {
+        if (qEnvironmentVariable("REPOSCO_COORDINATED_DESKTOP") != "1") {
+            QSKIP("Requires a currently coordinated interactive desktop.");
+        }
+        reposco::DesktopSession session;
+        QVERIFY(session.initialize());
+        QCOMPARE(session.hotkeyError(), 0UL);
+        QQuickWindow target;
+        target.setTitle("Reposco synthetic hotkey target");
+        target.resize(320, 180);
+        target.show();
+        auto* search = session.window()->findChild<QQuickItem*>("paletteSearch");
+        QVERIFY(search);
+        const auto nativeHandle = [](QQuickWindow* window) {
+            // Qt exposes the native HWND through a platform-neutral window identifier.
+            // NOLINTNEXTLINE(performance-no-int-to-ptr)
+            return reinterpret_cast<HWND>(window->winId());
+        };
+        const auto sendShortcut = [] {
+            std::array<INPUT, 6> input{};
+            constexpr std::array<WORD, 6> keys{VK_LWIN, VK_MENU, 'V', 'V', VK_MENU, VK_LWIN};
+            for (std::size_t index = 0; index < input.size(); ++index) {
+                input[index].type = INPUT_KEYBOARD;
+                input[index].ki.wVk = keys[index];
+                input[index].ki.dwFlags = index >= 3 ? KEYEVENTF_KEYUP : 0;
+            }
+            return SendInput(static_cast<UINT>(input.size()), input.data(), sizeof(INPUT)) ==
+                   input.size();
+        };
+        for (int iteration = 0; iteration < 3; ++iteration) {
+            target.raise();
+            target.requestActivate();
+            QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), nativeHandle(&target), 3000);
+            for (const auto key : {VK_LWIN, VK_RWIN, VK_MENU, VK_CONTROL, VK_SHIFT}) {
+                QVERIFY((GetAsyncKeyState(key) & 0x8000) == 0);
+            }
+            QVERIFY(sendShortcut());
+            QTRY_VERIFY_WITH_TIMEOUT(session.window()->isVisible(), 3000);
+            QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), nativeHandle(session.window()), 3000);
+            QTRY_VERIFY_WITH_TIMEOUT(search->hasActiveFocus(), 3000);
+            QTest::qWait(500);
+            QVERIFY(session.window()->isVisible());
+            QVERIFY(session.trayAvailable());
+            QVERIFY(sendShortcut());
+            QVERIFY(sendShortcut());
+            QTest::qWait(300);
+            QVERIFY(session.window()->isVisible());
+            QCOMPARE(GetForegroundWindow(), nativeHandle(session.window()));
+            std::array<INPUT, 2> escape{};
+            for (auto& event : escape) {
+                event.type = INPUT_KEYBOARD;
+                event.ki.wVk = VK_ESCAPE;
+            }
+            escape[1].ki.dwFlags = KEYEVENTF_KEYUP;
+            QCOMPARE(SendInput(static_cast<UINT>(escape.size()), escape.data(), sizeof(INPUT)),
+                     static_cast<UINT>(escape.size()));
+            QTRY_VERIFY_WITH_TIMEOUT(!session.window()->isVisible(), 3000);
+        }
+    }
+    void delayedReplayDoesNotReclaimFocusFromAnotherWindow() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticDesktopMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController history(directory.path(), std::move(monitor));
+        reposco::DesktopSession session;
+        QVERIFY(session.initialize(&history));
+        history.start();
+        QTRY_VERIFY_WITH_TIMEOUT(history.available(), 5000);
+        history.setCaptureActive(true);
+        emit source->captured("synthetic delayed replay", 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(history.model()->rowCount(), 1, 5000);
+        session.showWindow();
+        QVERIFY(QTest::qWaitForWindowActive(session.window()));
+        history.selectRow(0);
+        QTRY_COMPARE_WITH_TIMEOUT(history.preview(), QString("synthetic delayed replay"), 5000);
+        session.replaySelected(false);
+        QTRY_VERIFY_WITH_TIMEOUT(source->restoreToken > 0, 5000);
+        QQuickWindow other;
+        other.setTitle("Reposco synthetic focus change");
+        other.resize(320, 180);
+        other.show();
+        other.requestActivate();
+        QVERIFY(QTest::qWaitForWindowActive(&other));
+        emit source->restored(source->restoreToken, GetClipboardSequenceNumber(), true);
+        QVERIFY(history.replayStatus().contains("Focus or clipboard changed"));
+        QVERIFY(other.isActive());
+        QVERIFY(session.window()->isVisible());
+        history.shutdown();
+    }
+    void coordinatedTextReplayIntoOwnedNativeFixture() {
+        if (qEnvironmentVariable("REPOSCO_COORDINATED_DESKTOP") != "1") {
+            QSKIP("Requires a currently coordinated interactive desktop.");
+        }
+        QTemporaryDir directory;
+        const auto original = QString("Synthetic replay\r\nSpacing  preserved  ");
+        {
+            const auto key = reposco::loadDatabaseKey(directory.path(), false);
+            reposco::HistoryStore store(directory.filePath("history.db").toStdString(),
+                                        key->bytes());
+            const auto content = reposco::normalizeText(original);
+            QVERIFY(content);
+            store.record(*content, QDateTime::currentMSecsSinceEpoch());
+        }
+        reposco::HistoryController history(directory.path(),
+                                           std::make_unique<reposco::NativeClipboardMonitor>());
+        reposco::DesktopSession session;
+        QVERIFY(session.initialize(&history));
+        QCOMPARE(session.hotkeyError(), 0UL);
+        history.start();
+        QTRY_VERIFY_WITH_TIMEOUT(history.available(), 5000);
+        QVERIFY(!history.captureActive());
+        QProcess fixture;
+        fixture.start(QCoreApplication::applicationFilePath(), {"--paste-fixture"});
+        QVERIFY(fixture.waitForStarted(3000));
+        QVERIFY(fixture.waitForReadyRead(3000));
+        bool valid = false;
+        const auto identifier = fixture.readLine().trimmed().toULongLong(&valid);
+        QVERIFY(valid);
+        // The child returns only its synthetic EDIT handle; no user windows are queried.
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        const auto target = reinterpret_cast<HWND>(static_cast<quintptr>(identifier));
+        DWORD processId = 0;
+        QVERIFY(GetWindowThreadProcessId(target, &processId) != 0);
+        QCOMPARE(static_cast<qint64>(processId), fixture.processId());
+        const auto sendKeys = [](std::initializer_list<WORD> keys) {
+            std::vector<INPUT> input;
+            for (const auto key : keys) {
+                INPUT event{};
+                event.type = INPUT_KEYBOARD;
+                event.ki.wVk = key;
+                input.push_back(event);
+            }
+            const auto pressed = input;
+            for (auto it = pressed.rbegin(); it != pressed.rend(); ++it) {
+                auto event = *it;
+                event.ki.dwFlags = KEYEVENTF_KEYUP;
+                input.push_back(event);
+            }
+            return SendInput(static_cast<UINT>(input.size()), input.data(), sizeof(INPUT)) ==
+                   input.size();
+        };
+        const auto hasPastedOriginal = [&] {
+            wchar_t text[256]{};
+            DWORD_PTR returned = 0;
+            if (!SendMessageTimeoutW(target, WM_GETTEXT, std::size(text),
+                                     reinterpret_cast<LPARAM>(text), SMTO_ABORTIFHUNG, 300,
+                                     &returned)) {
+                return false;
+            }
+            return QString::fromWCharArray(text) == original;
+        };
+        for (const int mode : {0, 1, 2}) {
+            session.showWindow();
+            QVERIFY(QTest::qWaitForWindowActive(session.window()));
+            session.window()->hide();
+            QVERIFY(SetForegroundWindow(target));
+            QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), target, 3000);
+            QVERIFY(sendKeys({VK_LWIN, VK_MENU, 'V'}));
+            QTRY_VERIFY_WITH_TIMEOUT(session.window()->isVisible(), 3000);
+            // NOLINTNEXTLINE(performance-no-int-to-ptr)
+            const auto palette = reinterpret_cast<HWND>(session.window()->winId());
+            QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), palette, 3000);
+            QTRY_VERIFY_WITH_TIMEOUT(session.window()->isActive(), 3000);
+            history.selectRow(0);
+            QTRY_COMPARE_WITH_TIMEOUT(history.preview(), original, 3000);
+            auto* search = session.window()->findChild<QQuickItem*>("paletteSearch");
+            QVERIFY(search);
+            QTRY_VERIFY_WITH_TIMEOUT(search->hasActiveFocus(), 3000);
+            if (mode == 0) {
+                QVERIFY(sendKeys({VK_CONTROL, VK_RETURN}));
+                QTRY_COMPARE_WITH_TIMEOUT(history.replayStatus(), QString("Copied text"), 3000);
+                QVERIFY(session.window()->isVisible());
+                QVERIFY(!hasPastedOriginal());
+                SendMessageW(target, WM_PASTE, 0, 0);
+            } else if (mode == 1) {
+                QVERIFY(sendKeys({VK_RETURN}));
+            } else {
+                QVERIFY(sendKeys({VK_SHIFT, VK_RETURN}));
+            }
+            QTRY_VERIFY2_WITH_TIMEOUT(
+                hasPastedOriginal(),
+                qPrintable(QString("Mode %1: %2").arg(mode).arg(history.replayStatus())), 3000);
+            if (mode != 0) {
+                QVERIFY(!session.window()->isVisible());
+                QCOMPARE(history.replayStatus(), QString("Paste sent"));
+            }
+            QCOMPARE(history.model()->rowCount(), 1);
+            SendMessageW(target, WM_SETTEXT, 0, reinterpret_cast<LPARAM>(L""));
+        }
+        history.shutdown();
+        fixture.kill();
+        QVERIFY(fixture.waitForFinished(3000));
+    }
     void syntheticVisualStatesAndKeyboardSelection() {
         QTemporaryDir directory;
         auto monitor = std::make_unique<SyntheticDesktopMonitor>();
@@ -146,7 +361,7 @@ class DesktopTests : public QObject {
         hotkey->nativeEventFilter("windows_dispatcher_MSG", &message, &result);
         qInstallMessageHandler(previous);
         QLoggingCategory::setFilterRules(QString{});
-        QVERIFY(session.window()->isVisible());
+        QTRY_VERIFY_WITH_TIMEOUT(session.window()->isVisible(), 2000);
         QCOMPARE(result, qintptr{0});
         QVERIFY(!lifecycleMessages.empty());
         for (const auto& line : lifecycleMessages) {
@@ -266,5 +481,31 @@ class DesktopTests : public QObject {
     }
 };
 
-QTEST_MAIN(DesktopTests)
+int main(int argc, char* argv[]) {
+    QApplication application(argc, argv);
+    QApplication::setQuitOnLastWindowClosed(false);
+    if (application.arguments().contains("--paste-fixture")) {
+        const auto edit =
+            CreateWindowExW(0, L"EDIT", L"", WS_OVERLAPPEDWINDOW | WS_VISIBLE | ES_MULTILINE, 100,
+                            100, 380, 180, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+        if (!edit) {
+            return 2;
+        }
+        QTextStream(stdout) << reinterpret_cast<quintptr>(edit) << Qt::endl;
+        QTimer focus;
+        focus.setInterval(20);
+        QObject::connect(&focus, &QTimer::timeout, &application, [edit] {
+            if (GetForegroundWindow() == edit && GetFocus() != edit) {
+                SetFocus(edit);
+            }
+        });
+        focus.start();
+        QTimer::singleShot(30000, &application, &QCoreApplication::quit);
+        const auto result = application.exec();
+        DestroyWindow(edit);
+        return result;
+    }
+    DesktopTests tests;
+    return QTest::qExec(&tests, argc, argv);
+}
 #include "DesktopTests.moc"

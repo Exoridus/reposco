@@ -4,7 +4,7 @@
 
 An offline, privacy-oriented clipboard manager for Windows, built with C++20 and Qt Quick.
 
-**Status: 0.1.0-dev text-history slice.** The executable provides opt-in Unicode text capture, SQLCipher-encrypted local history, a random DPAPI-protected key, Smart dedup, Pause/Resume and a compact keyboard-oriented history palette. Search, bounded plain-text preview and separate Settings are available. First launch is paused; consent and pause persist, and resuming never imports the existing clipboard. Automatic paste/replay, pinning and image/HTML capture are not implemented yet.
+**Status: 0.1.0-dev text-history slice.** The executable provides opt-in Unicode text capture, SQLCipher-encrypted local history, a random DPAPI-protected key, Smart dedup, Pause/Resume and a compact keyboard-oriented history palette. Search, bounded plain-text preview and separate Settings are available. First launch is paused; consent and pause persist, and resuming never imports the existing clipboard. Text-only copy/replay is available; pinning and image/HTML capture are not implemented yet.
 
 ```powershell
 git clone https://github.com/Exoridus/reposco.git
@@ -21,7 +21,7 @@ Open Settings and select **Enable / resume capture** to opt in. Recognized exclu
 
 History is limited to 1000 items and 1 GiB of logical payload, with a selectable 7/30/90-day retention limit. The palette shows at most 100 bounded summaries, four visible slots and an 8192-character original-text preview. Search is literal, with ASCII case folding. Settings provides confirmed Clear history; it pauses capture and deletes encrypted history logically, without promising forensic SSD erasure. Missing keys or unsupported/corrupt history lock capture without replacing original files.
 
-For a visible launch after building, run `./build/windows-debug/reposco.exe --show`. `--diagnostics` enables payload-free lifecycle messages. `--smoke --show` uses temporary storage, disables capture and exits automatically. Up/Down selects entries; Escape hides the palette. The default hotkey is Win+Alt+V; alternative hotkeys, light/dark appearance and reduced motion are session settings. The rounded glass appearance uses a legible solid fallback; native backdrop blur is not claimed.
+For a visible launch after building, run `./build/windows-debug/reposco.exe --show`. `--diagnostics` enables payload-free lifecycle messages. `--smoke --show` uses temporary storage, disables capture and exits automatically. Up/Down selects entries; Escape hides the palette. Enter pastes original Unicode text into the previous eligible application, Shift+Enter pastes plain text (identical for this text-only slice), and Ctrl+Enter copies without pasting. Replay reads the full original rather than the preview. Own writes carry exclusion markers and do not create capture loops. Focus changes, unavailable/elevated targets or clipboard contention cancel automatic paste with an explanatory status; copy/manual paste remains the fallback. Successful input dispatch is not proof that every destination accepts paste. The default hotkey is Win+Alt+V; alternative hotkeys, light/dark appearance and reduced motion are session settings. The rounded glass appearance uses a legible solid fallback; native backdrop blur is not claimed.
 
 Portable core builds without Qt: `cmake --preset portable`, `cmake --build --preset portable`, `ctest --preset portable`. Linux/macOS desktop integration is not supported yet.
 

@@ -5,6 +5,7 @@
 #include <QAction>
 #include <QMenu>
 #include <QObject>
+#include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QSystemTrayIcon>
 #include <memory>
@@ -28,6 +29,7 @@ class DesktopSession final : public QObject {
     [[nodiscard]] bool trayAvailable() const;
     [[nodiscard]] unsigned long hotkeyError() const;
     Q_INVOKABLE void showWindow();
+    Q_INVOKABLE void replaySelected(bool copyOnly);
     void toggleWindow();
     void focusSearch();
     [[nodiscard]] const QString& shortcut() const;
@@ -38,6 +40,14 @@ class DesktopSession final : public QObject {
     void shortcutChanged();
 
   private:
+    void openFromHotkey();
+    void pasteRestoredText(quint32 sequence);
+    bool hotkey_open_pending_ = false;
+    QPointer<HistoryController> history_;
+    quintptr paste_target_ = 0;
+    unsigned long paste_process_ = 0;
+    unsigned long paste_thread_ = 0;
+    quint64 paste_generation_ = 0;
     QQmlApplicationEngine engine_;
     std::unique_ptr<QWK::QuickWindowAgent> window_agent_;
     QQuickWindow* window_ = nullptr;

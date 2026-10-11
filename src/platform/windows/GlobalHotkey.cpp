@@ -46,8 +46,11 @@ bool GlobalHotkey::nativeEventFilter(const QByteArray& eventType, void* message,
     }
     const auto* nativeMessage = static_cast<const MSG*>(message);
     if (registered_ && nativeMessage->message == WM_HOTKEY && nativeMessage->wParam == kHotkeyId) {
+        // Thread messages have no window-procedure result storage in Qt's dispatcher.
+        if (result) {
+            *result = 0;
+        }
         emit activated();
-        *result = 0;
         return true;
     }
     return false;

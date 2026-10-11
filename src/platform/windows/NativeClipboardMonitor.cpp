@@ -157,7 +157,28 @@ class NativeClipboardMonitor::Thread final : public QThread {
         acknowledged_.store(token);
         wake(kControlMessage);
     }
+    bool restoreText(const QString& text, quint64 token) {
+        if (!window_.load() || isInterruptionRequested() || text.isEmpty() ||
+            text.toUtf8().size() > static_cast<qsizetype>(kMaxTextBytes) ||
+            text.contains(QChar::Null)) {
+            return false;
+        }
+        {
+            const QMutexLocker guard(&restore_mutex_);
+            if (!restore_text_.isEmpty()) {
+                return false;
+            }
+            restore_text_ = text;
+            restore_token_.store(token);
+        }
+        wake(kControlMessage);
+        return true;
+    }
+    void cancelRestore() {
+        restore_token_.store(0);
+    }
     void stop() {
+        cancelRestore();
         active_.store(false);
         requestInterruption();
         wake(WM_CLOSE);
@@ -227,6 +248,72 @@ class NativeClipboardMonitor::Thread final : public QThread {
         bool pending = false;
         int attempts = 0;
 
+        void restore(HWND window) {
+            QString text;
+            quint64 request = 0;
+            {
+                const QMutexLocker guard(&thread.restore_mutex_);
+                text.swap(thread.restore_text_);
+                request = thread.restore_token_.load();
+            }
+            if (text.isEmpty()) {
+                return;
+            }
+            bool success = false;
+            DWORD sequence = 0;
+            const auto allocate = [](const void* data, SIZE_T bytes) -> HGLOBAL {
+                const auto handle = GlobalAlloc(GMEM_MOVEABLE, bytes);
+                if (!handle) {
+                    return nullptr;
+                }
+                auto* destination = GlobalLock(handle);
+                if (!destination) {
+                    GlobalFree(handle);
+                    return nullptr;
+                }
+                std::memcpy(destination, data, bytes);
+                GlobalUnlock(handle);
+                return handle;
+            };
+            constexpr DWORD denied = 0;
+            constexpr DWORD marked = 1;
+            auto marker = allocate(&marked, sizeof(marked));
+            auto permissionData = allocate(&denied, sizeof(denied));
+            const auto cloudFormat = RegisterClipboardFormatW(L"CanUploadToCloudClipboard");
+            auto cloudData = allocate(&denied, sizeof(denied));
+            auto payload =
+                allocate(text.utf16(), static_cast<SIZE_T>(text.size() + 1) * sizeof(WCHAR));
+            if (request && marker && permissionData && cloudFormat && cloudData && payload &&
+                OpenClipboard(window)) {
+                if (request == thread.restore_token_.load() && !thread.isInterruptionRequested() &&
+                    EmptyClipboard()) {
+                    // Publish exclusion metadata while locked, before making text visible.
+                    if (SetClipboardData(excluded, marker)) {
+                        marker = nullptr;
+                        if (SetClipboardData(permission, permissionData)) {
+                            permissionData = nullptr;
+                            if (SetClipboardData(cloudFormat, cloudData)) {
+                                cloudData = nullptr;
+                                if (SetClipboardData(CF_UNICODETEXT, payload)) {
+                                    payload = nullptr;
+                                    success = true;
+                                }
+                            }
+                        }
+                    }
+                    sequence = GetClipboardSequenceNumber();
+                }
+                CloseClipboard();
+                sequence = GetClipboardSequenceNumber();
+                success = success && GetClipboardOwner() == window;
+            }
+            for (const auto handle : {marker, permissionData, cloudData, payload}) {
+                if (handle) {
+                    GlobalFree(handle);
+                }
+            }
+            emit thread.monitor_.restored(request, sequence, success);
+        }
         void process(HWND window, bool update) {
             if (generation != thread.generation_.load()) {
                 generation = thread.generation_.load();
@@ -311,6 +398,9 @@ class NativeClipboardMonitor::Thread final : public QThread {
                 return 0;
             }
             if (message == WM_CLIPBOARDUPDATE || message == kControlMessage) {
+                if (message == kControlMessage) {
+                    state->restore(window);
+                }
                 state->process(window, message == WM_CLIPBOARDUPDATE);
                 return 0;
             }
@@ -326,6 +416,9 @@ class NativeClipboardMonitor::Thread final : public QThread {
             PostMessageW(window, message, 0, 0);
         }
     }
+    QMutex restore_mutex_;
+    QString restore_text_;
+    std::atomic<quint64> restore_token_{0};
     QMutex rules_mutex_;
     QStringList applications_;
     NativeClipboardMonitor& monitor_;
@@ -354,6 +447,12 @@ void NativeClipboardMonitor::acknowledge(quint64 token) {
 }
 void NativeClipboardMonitor::setExcludedApplications(const QStringList& applications) {
     thread_->setExcludedApplications(applications);
+}
+bool NativeClipboardMonitor::restoreText(const QString& text, quint64 token) {
+    return thread_->restoreText(text, token);
+}
+void NativeClipboardMonitor::cancelRestore() {
+    thread_->cancelRestore();
 }
 void NativeClipboardMonitor::stop() {
     thread_->stop();

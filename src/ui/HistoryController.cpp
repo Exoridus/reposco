@@ -24,6 +24,18 @@ HistoryController::HistoryController(QString directory, std::unique_ptr<Clipboar
         }
         finishShutdown();
     });
+    connect(monitor_.get(), &ClipboardMonitor::restored, this,
+            [this](quint64 token, quint32 sequence, bool success) {
+                if (token != replay_revision_ || !replay_busy_) {
+                    return;
+                }
+                replay_busy_ = false;
+                setReplayStatus(success ? tr("Copied text")
+                                        : tr("Clipboard unavailable. Try again."));
+                if (success) {
+                    emit replayCompleted(sequence, replay_copy_only_);
+                }
+            });
     connect(&storage_thread_, &QThread::finished, this, [this] {
         storage_stopped_ = true;
         finishShutdown();
@@ -52,6 +64,19 @@ void HistoryController::start() {
             &HistoryWorker::setRetentionDays);
     connect(this, &HistoryController::searchRequested, worker_, &HistoryWorker::search);
     connect(this, &HistoryController::previewRequested, worker_, &HistoryWorker::preview);
+    connect(this, &HistoryController::replayRequested, worker_, &HistoryWorker::replay);
+    connect(worker_, &HistoryWorker::replayReady, this,
+            [this](const QString& text, quint64 revision) {
+                replay_pending_ = false;
+                if (revision != replay_revision_ || !replay_busy_) {
+                    return;
+                }
+                if (!available_ || stopping_ || clearing_ || locked_ || text.isEmpty() ||
+                    !monitor_->restoreText(text, revision)) {
+                    replay_busy_ = false;
+                    setReplayStatus(tr("Clipboard unavailable. Try again."));
+                }
+            });
     connect(worker_, &HistoryWorker::searchReady, this,
             [this](HistorySummaries rows, quint64 revision) {
                 search_pending_ = false;
@@ -204,6 +229,9 @@ void HistoryController::refreshReady() {
     if (!available_ && !locked_ && !stopping_ && storage_ready_ && monitor_ready_) {
         available_ = true;
         applyActive(saved_active_);
+        if (model_.rowCount() > 0) {
+            selectRow(0);
+        }
     }
 }
 void HistoryController::failClosed() {
@@ -277,6 +305,7 @@ void HistoryController::selectEntry(qint64 id) {
     if (!available_ || stopping_ || clearing_) {
         return;
     }
+    resetPreview();
     selected_id_ = id;
     ++preview_revision_;
     preview_.clear();
@@ -289,7 +318,36 @@ void HistoryController::requestPreview() {
         emit previewRequested(selected_id_, preview_revision_);
     }
 }
+bool HistoryController::replayBusy() const {
+    return replay_busy_;
+}
+const QString& HistoryController::replayStatus() const {
+    return replay_status_;
+}
+void HistoryController::setReplayStatus(const QString& status) {
+    replay_status_ = status;
+    emit replayChanged();
+}
+void HistoryController::replaySelected(bool copyOnly) {
+    if (!available_ || stopping_ || clearing_ || locked_ || selected_id_ <= 0 || replay_busy_ ||
+        replay_pending_) {
+        return;
+    }
+    replay_busy_ = true;
+    replay_pending_ = true;
+    replay_copy_only_ = copyOnly;
+    setReplayStatus(tr("Restoring text..."));
+    emit replayRequested(selected_id_, ++replay_revision_);
+}
+void HistoryController::cancelReplay() {
+    ++replay_revision_;
+    emit replayInvalidated();
+    monitor_->cancelRestore();
+    replay_busy_ = false;
+    setReplayStatus({});
+}
 void HistoryController::resetPreview() {
+    cancelReplay();
     selected_id_ = 0;
     ++preview_revision_;
     preview_.clear();

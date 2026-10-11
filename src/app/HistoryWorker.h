@@ -31,6 +31,7 @@ class HistoryWorker final : public QObject {
     void setRetentionDays(int days);
     void search(const QString& query, quint64 revision);
     void preview(qint64 id, quint64 revision);
+    void replay(qint64 id, quint64 revision);
     void close();
   signals:
     void ready(reposco::HistorySummaries rows, bool captureEnabled, bool sixDigits,
@@ -42,6 +43,7 @@ class HistoryWorker final : public QObject {
     void cleared();
     void searchReady(reposco::HistorySummaries rows, quint64 revision);
     void previewReady(QString text, quint64 revision);
+    void replayReady(QString text, quint64 revision);
 
   private:
     void failClosed();

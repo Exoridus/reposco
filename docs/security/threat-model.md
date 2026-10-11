@@ -6,7 +6,7 @@ The intended asset is persisted history/preview content. Pinned SQLCipher uses O
 
 Same-user/elevated malware, clipboard readers, paste destinations, screen capture, pagefiles and crash dumps are outside this boundary. DPAPI is profile-bound, not portable recovery. SSD secure deletion is not promised.
 
-Capture runs on a dedicated STA. Exclusion/ignore markers and zero or malformed local-history permission reject content before text reads. Cloud-only opt-out is not local exclusion. Text is size-bounded, validated, normalized only for identity and transferred with one outstanding payload plus activation generations. Native delayed rendering can block its worker and delay orderly Quit; forced thread termination is not used. No guarantee of detecting unmarked secrets or executable-path exclusions exists.
+Capture runs on a dedicated STA. Exclusion/ignore markers and zero or malformed local-history permission reject content before text reads. Cloud-only opt-out is not local exclusion. Text is size-bounded, validated, normalized only for identity and transferred with one outstanding payload plus activation generations. Native delayed rendering can block its worker and delay orderly Quit; forced thread termination is not used. Native executable-path exclusions are supported with bounded rules; no guarantee of detecting unmarked secrets exists.
 
 The worker creates a 32-byte BCrypt key and atomically persists a versioned user-scope DPAPI envelope. Transient key buffers are wiped; SQLCipher memory-security mode is enabled. A writer lock prevents concurrent initialization. An incomplete key/database pair, DPAPI failure, unknown schema or storage error locks capture without automatic replacement. Data-directory access relies on Windows per-user profile permissions; this is not an additional boundary against the same user. A newly created envelope is preserved if database initialization fails, requiring deliberate recovery rather than silent reset.
 
@@ -17,7 +17,7 @@ QML receives bounded PlainText summaries, never arbitrary image/resource markup.
 Exact six-ASCII-digit text is excluded by default after Unicode whitespace trimming,
 before UTF-8 identity/hash construction; optional eight-digit exclusion is separate.
 Users may disable these rules; they also exclude legitimate standalone numbers.
-No rule clears or writes the OS clipboard. Existing stored secrets are not removed
+No capture rule clears or writes the OS clipboard. Explicit text replay does replace it, with exclusion markers to prevent recapture and OS history/cloud admission. Existing stored secrets are not removed
 by a later clipboard clear or a policy change.
 
 Configured native application exclusions match full executable paths, case-insensitively,
@@ -34,3 +34,14 @@ opt-in settings are retained; capture stays paused. UI summaries are dropped and
 SQLCipher page memory is released where supported. Logical deletion and releasing
 application caches do not guarantee erasure of process-memory copies, pagefiles,
 backups, crash dumps or physical SSD cells.
+
+Explicit replay retrieves only the selected full original on the storage worker and writes
+on the clipboard STA. Selection, search, clear, shutdown and dismiss invalidate queued
+replies. A write already inside its locked publication may complete; no clipboard rollback
+or backup is attempted. Automatic paste refuses unavailable/elevated targets, intervening
+focus changes, modifier keys still held or a changed clipboard sequence. HWND/process/thread
+checks are best-effort: HWND reuse within the same process/thread and a change between the
+last Win32 check and SendInput are not atomic identity guarantees. SendInput success means
+input was dispatched, not that every application accepted the paste. Clipboard locks fail
+without clearing the existing content. An allocation/publication failure after EmptyClipboard
+may leave marker-only content; previous clipboard values are deliberately not copied for recovery.

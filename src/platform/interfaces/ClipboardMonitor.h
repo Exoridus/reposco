@@ -15,9 +15,16 @@ class ClipboardMonitor : public QObject {
     virtual void acknowledge(quint64 token) = 0;
     virtual void setExcludedApplications(const QStringList&) {
     }
+    // Restores at most one explicit request; implementations may decline unsupported writes.
+    virtual bool restoreText(const QString&, quint64) {
+        return false;
+    }
+    virtual void cancelRestore() {
+    }
     virtual void stop() = 0;
   signals:
     void ready();
+    void restored(quint64 token, quint32 sequence, bool success);
     void captured(QString text, quint64 token, quint64 generation);
     void failure(QString message);
     void stopped();

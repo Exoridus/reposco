@@ -1,8 +1,10 @@
 # UI and capture-security validation
 
 This records the recovery milestone and its limits. Tests use synthetic text and
-temporary encrypted profiles. No interactive clipboard write, password-manager
-vault access or desktop-wide input injection is required by the visual harness.
+temporary encrypted profiles. Default/visual tests do not write the interactive
+clipboard. A separate coordinated test mode exercises Windows input only after
+current desktop authorization, with synthetic values and owned fixture windows.
+No password-manager vault access is performed.
 
 ## Capture boundary
 
@@ -66,13 +68,17 @@ Dark/light states use a solid, rounded glass-style fallback. Native desktop
 backdrop blur is not validated or claimed. Appearance, reduced motion and
 alternative hotkeys currently apply to the session. Search performs literal
 matching with ASCII case folding; it is bounded to 256 characters. Preview is
-bounded to 8192 original-text characters. Paste/replay remains unavailable.
+bounded to 8192 original-text characters. Explicit replay retrieves the full original asynchronously. Enter and Shift+Enter paste Unicode text; Ctrl+Enter copies only. No richer original formats are claimed.
 
 Open requests now show idempotently instead of toggling. Repeated hotkey dispatch
 cannot immediately hide the palette. Search receives focus on open/activation;
 focus loss does not automatically hide the window. Escape intentionally hides
-the active palette. The observed original intermittent flash was not reproduced
-with a physical shortcut, so its historical cause remains unconfirmed.
+the active palette. The coordinated OS hotkey test reproduced a process crash
+with exception 0xc0000005 in GlobalHotkey::nativeEventFilter: Qt's thread-message
+path supplies a null result pointer, which the handler dereferenced after opening.
+A deterministic null-pointer regression failed before the guard and passes after it.
+Hotkey activation waits briefly for shortcut release to avoid Alt-release focus
+races; open requests remain idempotent.
 
 The visual regression exposed a separate real defect: an Escape shortcut in the
 hidden Settings window intercepted palette Escape. Both shortcuts now require
@@ -120,8 +126,12 @@ Perform these checks manually in a coordinated disposable interactive session:
 7. On a disposable copy of a profile, confirm the encrypted database cannot be
    opened without its key. Never remove the real profile key to perform this test.
 
-Remote CI status must be checked separately. Local green tests do not establish
-a CI result; the existing workflow does not automatically run on bootstrap pushes.
+Remote CI status is checked separately. Bootstrap now triggers the existing
+private workflow. The first actual run exposed an SDK install/cache path mismatch;
+install-qt-action now installs under github.workspace to match the declared Qt path.
+Run 38156878340 completed Fast Quality, Portable Core, Windows Debug and Windows
+Release successfully. Full Verification and Portable Sanitizers were skipped on
+that push; they require the manual full input.
 
 ## Local evidence (2026-10-11)
 
@@ -154,3 +164,54 @@ Physical Win+Alt+V, Bitwarden interaction, isolated native clipboard markers,
 dual displays and virtual desktop transitions remain manual checks. Linux
 sanitizers were not rerun for this milestone. No installer was executed and no
 package was published.
+
+## Native usability follow-up (2026-10-11)
+
+Coordinated WinSta0 tests used synthetic text and temporary encrypted profiles.
+Actual OS Win+Alt+V dispatch reproduced the crash before the result-pointer guard.
+Subsequent open/search-focus, rapid repeated hotkey, Escape and reopen sequences
+passed. One early post-fix run failed a foreground assertion; it was not counted
+as success. These are coordinated SendInput tests, not manual physical-key proof
+across every monitor, DPI or virtual desktop.
+
+Exact `123456` and surrounding-whitespace variants stayed in the Windows clipboard,
+were absent from history/search, and pasted into an owned native EDIT. Native
+process exclusions also prevented capture. Replay marker publication preserved
+Unicode text, did not emit another capture and did not add a history row.
+
+The final coordinated replay fixture ran in a separate non-elevated process:
+Ctrl+Enter copied without automatic paste and kept the palette open; Enter and
+Shift+Enter restored full original text and pasted into the previously active
+native EDIT. CRLF and trailing spaces were preserved. Earlier fixture attempts
+failed on premature activation checks and on preexisting EDIT text; these were
+corrected before accepting the final run. Bitwarden itself was not accessed.
+
+Worker tests cover queued capture policy-generation changes, full originals longer
+than the 8192-character preview, clear cancellation, unsupported writes and one
+outstanding replay read after cancellation. A failing queue regression led to a
+separate storage-pending flag. Delayed replay completion must not reclaim focus
+from another window. Policy changes invalidate queued work; an already-started
+storage transaction may still finish, as documented in Privacy.
+
+Active isolated Windows tests remain enabled in CI; local CreateWindowStation
+is denied with error 5. Coordinated interactive tests are explicit opt-in, not
+an isolation fallback. Default desktop suites skip the two coordinated input
+cases. Manual Bitwarden/browser-extension checks with throwaway credentials,
+physical tray inspection, elevated/UIPI fault scenarios, multi-monitor and
+virtual-desktop transitions remain unverified. General unmarked passwords are
+still outside reliable detection. Glass/material refinement and richer formats
+remain later work; the approved palette layout is retained.
+
+The integrated follow-up passed dev.ps1 quick (7/7 local suites), then one
+final dev.ps1 full: repository/workflow/license/format checks, Debug QML lint and
+7/7 tests, all 21 owned clang-tidy/cppcheck sources, Release build and deployed
+package smoke. Both local builds explicitly reported six jobs. Refreshed real
+Qt screenshots in dark/light, empty/populated/search and Settings passed the
+visual harness at 100% and 150%; populated frames were visually inspected.
+The portable development ZIP is 36,304,771 bytes, SHA256
+`1a3a06be45ffcdfb8c6f0cfdc95cec622456ec589d8efade79e111a95a9740e6`.
+It is staged locally, not installed or published. Native replay is text-only;
+a sent paste request is not a guarantee for every third-party application.
+
+A separate Release CTest run also passed all seven suites. The repository has no
+Release test preset, so it used ctest --test-dir build/windows-release.

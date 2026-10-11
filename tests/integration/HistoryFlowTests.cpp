@@ -1,3 +1,4 @@
+#include "app/HistoryWorker.h"
 #include "platform/windows/KeyVault.h"
 #include "platform/windows/NativeClipboardMonitor.h"
 #include "ui/HistoryController.h"
@@ -11,6 +12,18 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
     bool active = false;
     quint64 generation = 0;
     int acknowledgements = 0;
+    bool supportsRestore = false;
+    int writes = 0;
+    QString restoredText;
+    bool restoreText(const QString& text, quint64 token) override {
+        if (!supportsRestore) {
+            return false;
+        }
+        ++writes;
+        restoredText = text;
+        emit restored(token, 42, true);
+        return true;
+    }
     void start() override {
         emit ready();
     }
@@ -30,6 +43,130 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
 class HistoryFlowTests : public QObject {
     Q_OBJECT
   private slots:
+    void replayUsesFullOriginalAndClearCancelsPendingReply() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        source->supportsRestore = true;
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        const auto original = QString("Original line\r\n") + QString(10000, 'x') + "  ";
+        emit source->captured(original, 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        controller.selectRow(0);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.preview().size(), 8192, 5000);
+        QCOMPARE(source->writes, 0);
+        QSignalSpy completed(&controller, &reposco::HistoryController::replayCompleted);
+        controller.replaySelected(true);
+        QTRY_COMPARE_WITH_TIMEOUT(completed.count(), 1, 5000);
+        QVERIFY(source->restoredText == original);
+        QCOMPARE(completed[0][1].toBool(), true);
+        QCOMPARE(controller.model()->rowCount(), 1);
+        controller.replaySelected(false);
+        controller.clearHistory(true);
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        QCOMPARE(source->writes, 1);
+        QCOMPARE(completed.count(), 1);
+        QVERIFY(!controller.replayBusy());
+        controller.shutdown();
+    }
+    void canceledReplayKeepsTheStorageQueueBounded() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        source->supportsRestore = true;
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        emit source->captured("synthetic bounded replay", 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        controller.selectRow(0);
+        QSignalSpy requested(&controller, &reposco::HistoryController::replayRequested);
+        controller.replaySelected(true);
+        controller.cancelReplay();
+        controller.replaySelected(true);
+        QCOMPARE(requested.count(), 1);
+        QTest::qWait(100);
+        QCOMPARE(source->writes, 0);
+        controller.replaySelected(true);
+        QTRY_COMPARE_WITH_TIMEOUT(source->writes, 1, 5000);
+        controller.shutdown();
+    }
+    void replayIsExplicitAndUnsupportedWriterFailsSafely() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        emit source->captured("synthetic replay original", 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        controller.selectRow(0);
+        QVERIFY(QMetaObject::invokeMethod(&controller, "replaySelected", Q_ARG(bool, true)));
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.property("replayBusy").toBool(), 5000);
+        QVERIFY(controller.property("replayStatus").toString().contains("unavailable"));
+        QCOMPARE(controller.model()->rowCount(), 1);
+        controller.shutdown();
+    }
+    void policyChangeDuringCaptureRejectsOldGeneration() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        const auto obsoleteGeneration = source->generation;
+        QVERIFY(controller.setCapturePolicy(true, true, {"C:/Synthetic/Vault.exe"}));
+        QVERIFY(controller.captureActive());
+        QVERIFY(source->generation != obsoleteGeneration);
+        emit source->captured("obsolete policy event", 1, obsoleteGeneration);
+        QCOMPARE(source->acknowledgements, 1);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        emit source->captured("123456", 2, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 2, 5000);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        emit source->captured("12345678", 3, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 3, 5000);
+        QCOMPARE(controller.model()->rowCount(), 0);
+        emit source->captured("current policy event", 4, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(source->acknowledgements, 4, 5000);
+        QCOMPARE(controller.model()->rowCount(), 1);
+        QSignalSpy stopped(&controller, &reposco::HistoryController::stopped);
+        controller.shutdown();
+        QTRY_COMPARE_WITH_TIMEOUT(stopped.count(), 1, 5000);
+    }
+    void queuedRecordCannotUseAnObsoletePolicyGeneration() {
+        QTemporaryDir directory;
+        auto gate = std::make_shared<reposco::CaptureGate>();
+        reposco::HistoryWorker worker(directory.path(), gate);
+        QSignalSpy ready(&worker, &reposco::HistoryWorker::ready);
+        QSignalSpy changed(&worker, &reposco::HistoryWorker::changed);
+        QSignalSpy processed(&worker, &reposco::HistoryWorker::processed);
+        worker.initialize();
+        QCOMPARE(ready.count(), 1);
+        worker.setPolicy(false, false, {});
+        gate->generation.store(1);
+        gate->active.store(true);
+        QVERIFY(QMetaObject::invokeMethod(&worker, "record", Qt::QueuedConnection,
+                                          Q_ARG(QString, QString("obsolete queued event")),
+                                          Q_ARG(quint64, 1), Q_ARG(quint64, 1)));
+        gate->active.store(false);
+        gate->generation.store(2);
+        worker.setPolicy(true, false, {});
+        gate->active.store(true);
+        QTRY_COMPARE_WITH_TIMEOUT(processed.count(), 1, 5000);
+        QCOMPARE(changed.count(), 0);
+        worker.close();
+        const auto key = reposco::loadDatabaseKey(directory.path(), true);
+        reposco::HistoryStore stored(directory.filePath("history.db").toStdString(), key->bytes());
+        QVERIFY(stored.summaries().empty());
+    }
     void exactCodePolicyPersistsAndClearInvalidatesQueuedCapture() {
         QTemporaryDir directory;
         auto monitor = std::make_unique<SyntheticMonitor>();

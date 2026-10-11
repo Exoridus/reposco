@@ -150,6 +150,13 @@ void HistoryWorker::preview(qint64 id, quint64 revision) {
         failClosed();
     }
 }
+void HistoryWorker::replay(qint64 id, quint64 revision) {
+    try {
+        emit replayReady(store_ ? QString::fromUtf8(store_->original(id)) : QString{}, revision);
+    } catch (const std::exception&) {
+        failClosed();
+    }
+}
 void HistoryWorker::failClosed() {
     gate_->active.store(false);
     if (maintenance_) {
