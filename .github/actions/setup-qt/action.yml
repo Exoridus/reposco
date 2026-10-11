@@ -1,0 +1,27 @@
+name: Setup Qt
+description: Exact Reposco Qt Quick SDK profile
+inputs:
+  cached:
+    description: Validated SDK cache restored by the caller
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Install Qt 6.12.0
+      if: inputs.cached != 'true'
+      uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+      with:
+        version: '6.12.0'
+        arch: win64_msvc2022_64
+        archives: qtbase qtdeclarative qtsvg qttools
+        modules: qtshadertools
+        aqtsource: git+https://github.com/miurahr/aqtinstall.git@16db45a70b5905ad596941b223469bc86a56901e
+        cache: 'false'
+    - name: Export and verify exact SDK
+      shell: pwsh
+      run: | # zizmor: ignore[github-env] -- runner-owned workspace plus a fixed SDK suffix, no untrusted workflow input.
+        $qtRoot = Join-Path $env:GITHUB_WORKSPACE 'Qt/6.12.0/msvc2022_64'
+        $version = & "$qtRoot/bin/qmake.exe" -query QT_VERSION
+        if ($LASTEXITCODE -ne 0 -or $version -ne '6.12.0') { throw 'Qt cache version mismatch' }
+        "QT_ROOT_DIR=$qtRoot" >> $env:GITHUB_ENV
+        "$qtRoot/bin" >> $env:GITHUB_PATH

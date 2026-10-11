@@ -1,0 +1,9 @@
+[submodule "third_party/qwindowkit"]
+	path = third_party/qwindowkit
+	url = https://github.com/stdware/qwindowkit.git
+[submodule "third_party/sqlcipher"]
+	path = third_party/sqlcipher
+	url = https://github.com/sqlcipher/sqlcipher.git
+[submodule "third_party/openssl"]
+	path = third_party/openssl
+	url = https://github.com/openssl/openssl.git

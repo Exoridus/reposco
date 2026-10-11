@@ -1,0 +1,29 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 27, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base", "hidden": true, "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", "BUILD_TESTING": "ON" }
+    },
+    { "name": "windows-debug", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "windows-release", "inherits": "base", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    {
+      "name": "portable", "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "REPOSCO_BUILD_APP": "OFF" }
+    },
+    { "name": "portable-sanitizers", "inherits": "portable", "cacheVariables": { "REPOSCO_SANITIZERS": "ON" } }
+  ],
+  "buildPresets": [
+    { "name": "windows-debug", "configurePreset": "windows-debug" },
+    { "name": "windows-release", "configurePreset": "windows-release" },
+    { "name": "portable", "configurePreset": "portable" },
+    { "name": "portable-sanitizers", "configurePreset": "portable-sanitizers" }
+  ],
+  "testPresets": [
+    { "name": "windows-debug", "configurePreset": "windows-debug", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "portable", "configurePreset": "portable", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } },
+    { "name": "portable-sanitizers", "configurePreset": "portable-sanitizers", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error" } }
+  ]
+}

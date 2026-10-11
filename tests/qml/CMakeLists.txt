@@ -1,0 +1,7 @@
+qt_add_executable(qml_tests QuickTests.cpp)
+target_link_libraries(qml_tests PRIVATE Qt6::QuickTest)
+target_compile_definitions(qml_tests PRIVATE QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+reposco_owned_target(qml_tests)
+set_target_properties(qml_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+add_test(NAME qml.softglass COMMAND qml_tests -input "${CMAKE_CURRENT_SOURCE_DIR}" -o -,txt)
+set_tests_properties(qml.softglass PROPERTIES LABELS "qml;windows" TIMEOUT 30)

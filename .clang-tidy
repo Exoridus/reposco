@@ -1,0 +1,34 @@
+# Curated checks avoid ownership/cast rules that cannot model Qt parent ownership or Win32 handles.
+# Leading return types and non-designated initialization follow the project LLVM style.
+Checks: >-
+  -*,
+  bugprone-use-after-move,
+  bugprone-dangling-handle,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memory-comparison,
+  bugprone-unused-raii,
+  performance-*,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-loop-convert,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-init-variables,
+  readability-inconsistent-declaration-parameter-name,
+  readability-misleading-indentation,
+  readability-redundant-smartptr-get,
+  readability-identifier-naming
+WarningsAsErrors: '*'
+HeaderFilterRegex: '[/\\](src|tests)[/\\]'
+ExcludeHeaderFilterRegex: '[/\\](third_party|build)[/\\]'
+CheckOptions:
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.MethodCase: camelBack
+  readability-identifier-naming.PrivateMemberCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: '_'
+  readability-identifier-naming.FunctionIgnoredRegexp: '^(initTestCase|cleanupTestCase|qt_.*|main)$'
+FormatStyle: file
