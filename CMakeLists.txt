@@ -13,6 +13,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(REPOSCO_BUILD_APP "Build the Windows desktop integration proof" ${WIN32})
 option(REPOSCO_USE_SCCACHE "Use the optional sccache compiler launcher" OFF)
 option(REPOSCO_SANITIZERS "Enable ASan/UBSan for portable targets" OFF)
+option(REPOSCO_ISOLATED_CLIPBOARD_TESTS
+       "Enable private window-station tests requiring Windows privileges" OFF)
 if(REPOSCO_SANITIZERS
    AND (MSVC
         OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"
@@ -22,7 +24,7 @@ endif()
 include(CTest)
 include(cmake/Warnings.cmake)
 
-add_library(reposco_core STATIC src/core/ContentPolicy.cpp)
+add_library(reposco_core STATIC src/core/ContentPolicy.cpp src/core/CapturePolicy.cpp)
 target_include_directories(reposco_core PUBLIC src/core)
 reposco_owned_target(reposco_core)
 
@@ -60,6 +62,13 @@ if(REPOSCO_BUILD_APP)
   find_package(Qt6 6.12.0 EXACT REQUIRED COMPONENTS CorePrivate GuiPrivate QuickPrivate)
   qt_standard_project_setup(REQUIRES 6.12)
   include(cmake/Dependencies.cmake)
+  add_library(reposco_text STATIC src/core/TextContent.cpp)
+  target_include_directories(reposco_text PUBLIC "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(
+    reposco_text
+    PUBLIC Qt6::Core
+    PRIVATE reposco_core)
+  reposco_owned_target(reposco_text)
   add_subdirectory(src/platform/windows)
   add_subdirectory(src/storage)
   add_subdirectory(src/app)

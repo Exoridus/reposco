@@ -1,6 +1,6 @@
 # Reposco repository rules
 
-Reposco is Windows-first and offline. This tree proves desktop and encryption infrastructure only. [Architecture](docs/architecture/overview.md) owns boundaries; [build and test](docs/development/build-and-test.md) owns commands; [threat model](docs/security/threat-model.md) owns security limitations.
+Reposco is Windows-first and offline. This tree includes initial opt-in encrypted text history; the full v0.1.0 product remains incomplete. [Architecture](docs/architecture/overview.md) owns boundaries; [build and test](docs/development/build-and-test.md) owns commands; [threat model](docs/security/threat-model.md) owns security limitations.
 
 - Portable core has no Win32, storage or presentation dependencies. Storage owns SQLCipher on a dedicated worker. Windows owns native APIs. Qt/QML owns presentation; QWindowKit stays in UI infrastructure.
 - Use synthetic fixtures. Never log payloads or keys. No plaintext database fallback, implicit network preview loads, service locator or unbounded worker queues.

@@ -1,12 +1,20 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
+import Reposco
 import "components"
 
 Window {
     id: root
 
+    property HistoryController historyController: null
+
     color: "transparent"
-    height: 400
+    height: 500
+    minimumHeight: 400
+    minimumWidth: 400
     title: qsTr("Reposco")
     visible: false
     width: 620
@@ -19,59 +27,120 @@ Window {
     SoftGlass {
         anchors.fill: parent
 
-        Column {
+        ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 28
-            spacing: 20
+            anchors.margins: 20
+            spacing: 10
 
             Text {
+                Layout.fillWidth: true
                 color: "#f5f7fb"
                 font.bold: true
                 font.pixelSize: 26
                 objectName: "titleBar"
                 text: qsTr("Reposco")
                 textFormat: Text.PlainText
-                width: parent.width
             }
             Text {
+                Layout.fillWidth: true
                 color: "#c4cfdd"
-                font.pixelSize: 16
-                text: qsTr("Your clipboard, kept close.")
+                font.pixelSize: 13
+                text: root.historyController ? root.historyController.status : qsTr("Capture unavailable.")
                 textFormat: Text.PlainText
-                width: parent.width
-            }
-            Rectangle {
-                color: "#283648"
-                height: 116
-                radius: 12
-                width: parent.width
-
-                Text {
-                    anchors.fill: parent
-                    anchors.margins: 18
-                    color: "#f5f7fb"
-                    text: qsTr("Engineering preview\nClipboard capture is not enabled in this build.")
-                    textFormat: Text.PlainText
-                    wrapMode: Text.WordWrap
-                }
+                wrapMode: Text.WordWrap
             }
             Text {
+                Layout.fillWidth: true
                 color: "#c4cfdd"
-                objectName: "hotkeyStatus"
-                text: qsTr("Win+Alt+V opens this palette. Esc hides it.")
+                font.pixelSize: 12
+                text: qsTr("Starting capture stores future copied text locally in encrypted history. Unmarked passwords may still be captured. Pause at any time; resuming does not collect the current clipboard.")
                 textFormat: Text.PlainText
-                width: parent.width
                 wrapMode: Text.WordWrap
             }
             Button {
-                text: qsTr("Hide palette")
+                enabled: root.historyController !== null && root.historyController.available
+                objectName: "captureToggle"
+                text: root.historyController && root.historyController.captureActive ? qsTr("Pause capture") : qsTr("Start / resume text capture")
 
-                onClicked: root.hide()
+                onClicked: {
+                    if (root.historyController)
+                        root.historyController.setCaptureActive(!root.historyController.captureActive);
+                }
             }
-            Button {
-                text: qsTr("Quit Reposco")
+            ListView {
+                id: historyList
 
-                onClicked: Qt.quit()
+                Layout.fillHeight: true
+                Layout.fillWidth: true
+                clip: true
+                model: root.historyController ? root.historyController.model : null
+                objectName: "historyList"
+                spacing: 6
+
+                ScrollBar.vertical: ScrollBar {
+                }
+                delegate: Rectangle {
+                    id: row
+
+                    required property double copiedAt
+                    required property string excerpt
+
+                    color: "#283648"
+                    height: 66
+                    radius: 8
+                    width: historyList.width
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 4
+
+                        Text {
+                            color: "#f5f7fb"
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            objectName: "historyExcerpt"
+                            text: row.excerpt.replace(/\n/g, " ")
+                            textFormat: Text.PlainText
+                            width: parent.width
+                        }
+                        Text {
+                            color: "#c4cfdd"
+                            font.pixelSize: 11
+                            text: new Date(row.copiedAt).toLocaleTimeString()
+                            textFormat: Text.PlainText
+                        }
+                    }
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    color: "#c4cfdd"
+                    text: qsTr("No text history yet.")
+                    textFormat: Text.PlainText
+                    visible: historyList.count === 0
+                }
+            }
+            Text {
+                Layout.fillWidth: true
+                color: "#c4cfdd"
+                font.pixelSize: 12
+                objectName: "hotkeyStatus"
+                text: qsTr("Latest 100 entries. Win+Alt+V opens this palette. Esc hides it.")
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+            }
+            RowLayout {
+                Button {
+                    text: qsTr("Hide palette")
+
+                    onClicked: root.hide()
+                }
+                Button {
+                    text: qsTr("Quit Reposco")
+
+                    onClicked: Qt.quit()
+                }
             }
         }
     }

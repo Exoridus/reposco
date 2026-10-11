@@ -92,7 +92,10 @@ jobs:
       - name: Provision pinned build tools
         run: ./tools/dev.ps1 setup
       - name: Build and test
-        run: ./tools/dev.ps1 test -UseSccache
+        run: |
+          cmake --preset windows-debug -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DREPOSCO_ISOLATED_CLIPBOARD_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Private clipboard test configuration failed' }
+          ./tools/dev.ps1 test -UseSccache
       - name: QML quality
         run: |
           ./tools/quality.ps1 -Mode FormatCheck -QtRoot $env:QT_ROOT_DIR
@@ -224,6 +227,8 @@ jobs:
       - name: Complete validation
         run: |
           ./tools/dev.ps1 setup
+          cmake --preset windows-debug -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DREPOSCO_ISOLATED_CLIPBOARD_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'Private clipboard test configuration failed' }
           ./tools/dev.ps1 full
 
   portable-sanitizers:

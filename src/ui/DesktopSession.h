@@ -15,12 +15,13 @@ class QuickWindowAgent;
 }
 
 namespace reposco {
+class HistoryController;
 class DesktopSession final : public QObject {
     Q_OBJECT
   public:
     explicit DesktopSession(QObject* parent = nullptr);
     ~DesktopSession() override;
-    [[nodiscard]] bool initialize();
+    [[nodiscard]] bool initialize(HistoryController* history = nullptr);
     [[nodiscard]] QQuickWindow* window() const;
     [[nodiscard]] bool trayAvailable() const;
     [[nodiscard]] unsigned long hotkeyError() const;
@@ -34,6 +35,7 @@ class DesktopSession final : public QObject {
     QQuickWindow* window_ = nullptr;
     QAction show_action_;
     QAction quit_action_;
+    QAction capture_action_;
     QMenu tray_menu_;
     QSystemTrayIcon tray_;
     GlobalHotkey hotkey_;

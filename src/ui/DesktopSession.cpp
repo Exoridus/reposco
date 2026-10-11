@@ -1,4 +1,5 @@
 #include "DesktopSession.h"
+#include "HistoryController.h"
 
 #include <QApplication>
 #include <QQuickItem>
@@ -8,7 +9,8 @@
 
 namespace reposco {
 DesktopSession::DesktopSession(QObject* parent)
-    : QObject(parent), show_action_(tr("Show Reposco"), this), quit_action_(tr("Quit"), this) {
+    : QObject(parent), show_action_(tr("Show Reposco"), this), quit_action_(tr("Quit"), this),
+      capture_action_(this) {
     quit_action_.setObjectName("quitAction");
     connect(&show_action_, &QAction::triggered, this, &DesktopSession::toggleWindow);
     connect(&quit_action_, &QAction::triggered, this, &DesktopSession::quitRequested);
@@ -22,9 +24,25 @@ DesktopSession::DesktopSession(QObject* parent)
             });
 }
 DesktopSession::~DesktopSession() = default;
-bool DesktopSession::initialize() {
+bool DesktopSession::initialize(HistoryController* history) {
     if (window_) {
         return true;
+    }
+    if (history) {
+        engine_.setInitialProperties({{"historyController", QVariant::fromValue(history)}});
+        capture_action_.setObjectName("captureAction");
+        const auto updateCaptureAction = [this, history] {
+            capture_action_.setEnabled(history->available());
+            capture_action_.setText(history->captureActive() ? tr("Pause capture")
+                                                             : tr("Start / resume text capture"));
+        };
+        connect(history, &HistoryController::stateChanged, this, updateCaptureAction);
+        connect(&capture_action_, &QAction::triggered, history,
+                [history] { history->setCaptureActive(!history->captureActive()); });
+        updateCaptureAction();
+    } else {
+        capture_action_.setEnabled(false);
+        capture_action_.setText(tr("Capture unavailable"));
     }
     engine_.loadFromModule("Reposco", "Main");
     if (engine_.rootObjects().isEmpty()) {
@@ -40,10 +58,11 @@ bool DesktopSession::initialize() {
     }
     window_agent_->setTitleBar(window_->findChild<QQuickItem*>("titleBar"));
     tray_menu_.addAction(&show_action_);
+    tray_menu_.addAction(&capture_action_);
     tray_menu_.addSeparator();
     tray_menu_.addAction(&quit_action_);
     tray_.setIcon(QIcon(":/assets/branding/temporary-icon.svg"));
-    tray_.setToolTip(tr("Reposco - engineering preview"));
+    tray_.setToolTip(tr("Reposco - encrypted text history"));
     tray_.setContextMenu(&tray_menu_);
     tray_.show();
     if (!hotkey_.registerDefault()) {

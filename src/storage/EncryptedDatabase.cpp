@@ -2,6 +2,7 @@
 
 #include <sqlite3.h>
 
+#include <filesystem>
 #include <limits>
 
 namespace reposco {
@@ -11,6 +12,12 @@ void EncryptedDatabase::Close::operator()(sqlite3* database) const {
 EncryptedDatabase::EncryptedDatabase(const std::string& path, std::span<const unsigned char> key) {
     if (key.empty() || key.size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         throw std::invalid_argument("A nonempty bounded database key is required");
+    }
+    const std::filesystem::path file{std::u8string(path.begin(), path.end())};
+    // SQLite treats an existing empty file as a new database; history must fail closed instead.
+    if (std::filesystem::exists(file) &&
+        (!std::filesystem::is_regular_file(file) || std::filesystem::file_size(file) < 4096)) {
+        throw std::runtime_error("Existing encrypted database is truncated or unavailable");
     }
     sqlite3* raw = nullptr;
     const int opened =
@@ -28,6 +35,8 @@ EncryptedDatabase::EncryptedDatabase(const std::string& path, std::span<const un
     (void)scalar("SELECT count(*) FROM sqlite_master");
     execute("PRAGMA temp_store=MEMORY");
     execute("PRAGMA secure_delete=ON");
+    execute("PRAGMA cipher_memory_security=ON");
+    execute("PRAGMA synchronous=FULL");
     execute("PRAGMA foreign_keys=ON");
     if (scalar("PRAGMA journal_mode=DELETE") != "delete") {
         throw std::runtime_error("The approved database journal mode is unavailable");

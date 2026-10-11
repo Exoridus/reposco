@@ -22,6 +22,7 @@ class EncryptedDatabase final {
     [[nodiscard]] std::string cipherProvider() const;
 
   private:
+    friend class HistoryStore;
     struct Close {
         void operator()(sqlite3* database) const;
     };

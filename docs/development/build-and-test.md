@@ -24,3 +24,12 @@ After building Release, `./tools/package.ps1 -Installer` also compiles the per-u
 Linux/macOS use the Qt-free `portable` preset. `portable-sanitizers` adds GCC/Clang ASan/UBSan. These do not claim native desktop support. Run `ctest --preset portable` after building.
 
 CI lanes are Fast Quality, Windows Debug, Windows Release and Portable Core. Manual Full Verification adds analysis, sanitizers and package checks. Actual remote status/timings require an authorized push and Actions run.
+
+Text-history tests use temporary profiles and synthetic monitor adapters. Native listener lifecycle is tested while inactive. Active Win32 clipboard tests create a private window station before Qt initialization; they never fall back to the interactive clipboard. Windows Debug and manual Full Verification CI enable `REPOSCO_ISOLATED_CLIPBOARD_TESTS=ON`. Creating a named window station requires suitable Windows privileges; it was denied locally (error 5), so active native handle validation remains unverified here. To run it in an appropriate disposable Windows environment:
+
+```powershell
+cmake --preset windows-debug -DREPOSCO_ISOLATED_CLIPBOARD_TESTS=ON
+./tools/dev.ps1 test -TestFilter integration.clipboard_isolated
+```
+
+An enabled isolation test fails when privileges or isolation are missing. Leave the option OFF on an ordinary local account. `reposco.exe --smoke` always uses temporary storage and disabled capture, regardless of the real profile's saved preference.
