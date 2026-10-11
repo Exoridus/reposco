@@ -139,14 +139,14 @@ Window {
                 Keys.onDownPressed: root.moveSelection(1)
                 Keys.onEnterPressed: function (event) {
                     if (root.desktopSession) {
-                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0);
+                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
                         event.accepted = true;
                     }
                 }
                 Keys.onEscapePressed: root.hide()
                 Keys.onReturnPressed: function (event) {
                     if (root.desktopSession) {
-                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0);
+                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
                         event.accepted = true;
                     }
                 }
@@ -159,8 +159,12 @@ Window {
             PreviewPane {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 134
+                imageSource: root.historyController ? (paletteStyle.darkMode ? root.historyController.darkPreviewImage : root.historyController.lightPreviewImage) : ""
+                kind: root.historyController ? root.historyController.previewKind : "Text"
                 preview: root.historyController ? root.historyController.preview : ""
+                rows: root.historyController ? root.historyController.previewRows : []
                 tokens: paletteStyle
+                truncated: root.historyController !== null && root.historyController.previewTruncated
                 visible: historyList.count > 0
             }
             ListView {
@@ -218,7 +222,7 @@ Window {
                     color: paletteStyle.secondary
                     elide: Text.ElideRight
                     font.pixelSize: 11
-                    text: root.historyController && root.historyController.replayStatus.length > 0 ? root.historyController.replayStatus : qsTr("↑ ↓ Select    Enter Paste text    Ctrl+Enter Copy    Esc Close")
+                    text: root.historyController && root.historyController.replayStatus.length > 0 ? root.historyController.replayStatus : qsTr("↑ ↓ Select    Enter Paste    Ctrl+Enter Copy    Esc Close")
                 }
             }
         }

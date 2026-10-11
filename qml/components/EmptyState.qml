@@ -42,7 +42,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter
             color: root.tokens.secondary
             font.pixelSize: 12
-            text: root.searching ? qsTr("Try a different search.") : root.captureActive ? qsTr("Your next copied text will appear here.") : qsTr("Choose what Reposco captures in Settings.")
+            text: root.searching ? qsTr("Try a different search.") : root.captureActive ? qsTr("Your next copied content will appear here.") : qsTr("Choose what Reposco captures in Settings.")
         }
         ActionButton {
             Layout.alignment: Qt.AlignHCenter

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "content/ClipboardContent.h"
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -19,6 +20,13 @@ class ClipboardMonitor : public QObject {
     virtual bool restoreText(const QString&, quint64) {
         return false;
     }
+    virtual bool restoreContent(const ClipboardContent& content, quint64 token) {
+        if (!content.html.isEmpty() || !content.rtf.isEmpty() || !content.png.isEmpty() ||
+            !content.dib.isEmpty() || !content.dibV5.isEmpty()) {
+            return false;
+        }
+        return restoreText(content.text, token);
+    }
     virtual void cancelRestore() {
     }
     virtual void stop() = 0;
@@ -26,6 +34,7 @@ class ClipboardMonitor : public QObject {
     void ready();
     void restored(quint64 token, quint32 sequence, bool success);
     void captured(QString text, quint64 token, quint64 generation);
+    void capturedContent(reposco::ClipboardContent content, quint64 token, quint64 generation);
     void failure(QString message);
     void stopped();
 };

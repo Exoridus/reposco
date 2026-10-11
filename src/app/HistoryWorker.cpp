@@ -69,9 +69,13 @@ void HistoryWorker::initialize() {
     }
 }
 void HistoryWorker::record(const QString& text, quint64 token, quint64 generation) {
+    recordContent(ClipboardContent{text}, token, generation);
+}
+void HistoryWorker::recordContent(const ClipboardContent& content, quint64 token,
+                                  quint64 generation) {
     try {
         if (store_ && gate_->permits(generation)) {
-            const auto normalized = normalizeText(text, six_digits_, eight_digits_);
+            const auto normalized = normalizeClipboard(content, six_digits_, eight_digits_);
             if (normalized &&
                 store_->record(*normalized, QDateTime::currentMSecsSinceEpoch(),
                                [this, generation] { return gate_->permits(generation); })) {
@@ -148,7 +152,8 @@ void HistoryWorker::search(const QString& query, quint64 revision) {
 void HistoryWorker::preview(qint64 id, quint64 revision) {
     try {
         if (store_) {
-            emit previewReady(store_->preview(id), revision);
+            const auto content = store_->content(id, true);
+            emit previewReady(content ? makeContentPreview(*content) : ContentPreview{}, revision);
         }
     } catch (const std::exception&) {
         failClosed();
@@ -156,7 +161,20 @@ void HistoryWorker::preview(qint64 id, quint64 revision) {
 }
 void HistoryWorker::replay(qint64 id, quint64 revision) {
     try {
-        emit replayReady(store_ ? QString::fromUtf8(store_->original(id)) : QString{}, revision);
+        auto content = store_ ? store_->content(id) : std::nullopt;
+        if (content && !normalizeClipboard(*content, false, false)) {
+            throw std::runtime_error("Stored content is invalid");
+        }
+        if (content && content->text.isEmpty() && !content->html.isEmpty()) {
+            const auto fragment = htmlFragment(content->html);
+            if (!fragment) {
+                throw std::runtime_error("Stored HTML is invalid");
+            }
+            OfflineDocument document;
+            document.setHtml(*fragment);
+            content->text = document.toPlainText();
+        }
+        emit replayReady(content.value_or(ClipboardContent{}), revision);
     } catch (const std::exception&) {
         failClosed();
     }

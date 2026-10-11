@@ -1,23 +1,23 @@
 # Threat model
 
-This development slice implements opt-in encrypted Unicode text history, not the full shipping product. First launch is paused. Tests and package smoke use synthetic data without collecting user clipboard contents.
+This development slice implements opt-in encrypted supported text, markup and image history, not the full shipping product. First launch is paused. Tests and package smoke use synthetic data without collecting user clipboard contents.
 
 The intended asset is persisted history/preview content. Pinned SQLCipher uses OpenSSL 3. Nonempty keys precede protected reads. Wrong keys/unreadable files/missing cipher identity fail closed. Tests reject no-key encrypted reads and plaintext SQLite headers. User-scope DPAPI rejects corrupted envelopes and never uses machine scope.
 
 Same-user/elevated malware, clipboard readers, paste destinations, screen capture, pagefiles and crash dumps are outside this boundary. DPAPI is profile-bound, not portable recovery. SSD secure deletion is not promised.
 
-Capture runs on a dedicated STA. Exclusion/ignore markers and zero or malformed local-history permission reject content before text reads. Cloud-only opt-out is not local exclusion. Text is size-bounded, validated, normalized only for identity and transferred with one outstanding payload plus activation generations. Native delayed rendering can block its worker and delay orderly Quit; forced thread termination is not used. Native executable-path exclusions are supported with bounded rules; no guarantee of detecting unmarked secrets exists.
+Capture runs on a dedicated STA. Exclusion/ignore markers and zero or malformed local-history permission reject content before payload reads. Cloud-only opt-out is not local exclusion. Representations are size-bounded and validated; original bytes are separated from derived search/identity and transferred with one outstanding payload plus activation generations. Native delayed rendering can block its worker and delay orderly Quit; forced thread termination is not used. Native executable-path exclusions are supported with bounded rules; no guarantee of detecting unmarked secrets exists.
 
 The worker creates a 32-byte BCrypt key and atomically persists a versioned user-scope DPAPI envelope. Transient key buffers are wiped; SQLCipher memory-security mode is enabled. A writer lock prevents concurrent initialization. An incomplete key/database pair, DPAPI failure, unknown schema or storage error locks capture without automatic replacement. Data-directory access relies on Windows per-user profile permissions; this is not an additional boundary against the same user. A newly created envelope is preserved if database initialization fails, requiring deliberate recovery rather than silent reset.
 
-The database uses DELETE journaling, FULL synchronization, secure_delete and in-memory temporary storage. WAL is not approved. Retention/count/logical-byte eviction is transactional; physical file size and SSD secure deletion are not guaranteed. Disk-full fault injection, recovery UX, richer payload artifacts and full hardening remain future work.
+The database uses DELETE journaling, FULL synchronization, secure_delete and in-memory temporary storage. WAL is not approved. Retention/count/logical-byte eviction is transactional; physical file size and SSD secure deletion are not guaranteed. Disk-full fault injection, recovery UX, third-party rich-format interoperability and full hardening remain future work.
 
-QML receives bounded PlainText summaries, never arbitrary image/resource markup. Future rich previews must block implicit network/file/UNC reads. Portable-core ASan/UBSan tests do not cover the Windows desktop or crypto stack. No security audit, code-signing identity, recovery guarantee or verified reporting channel exists yet.
+QML receives bounded PlainText summaries, worker-generated local PNG previews and bounded table cells, never arbitrary HTML/resource markup. OfflineDocument refuses all resource loading without delegating to file/network/UNC handlers. Image dimensions, HTML structure/spans and RTF groups are bounded before import. Invalid HTML colors are rejected before Qt can include values in diagnostics. This conservative subset rejects unsupported representations rather than claiming arbitrary format safety. Portable-core ASan/UBSan tests do not cover the Windows desktop or crypto stack. No security audit, code-signing identity, recovery guarantee or verified reporting channel exists yet.
 
 Exact six-ASCII-digit text is excluded by default after Unicode whitespace trimming,
 before UTF-8 identity/hash construction; optional eight-digit exclusion is separate.
 Users may disable these rules; they also exclude legitimate standalone numbers.
-No capture rule clears or writes the OS clipboard. Explicit text replay does replace it, with exclusion markers to prevent recapture and OS history/cloud admission. Existing stored secrets are not removed
+No capture rule clears or writes the OS clipboard. Explicit supported-format replay does replace it, with exclusion markers to prevent recapture and OS history/cloud admission. Existing stored secrets are not removed
 by a later clipboard clear or a policy change.
 
 Configured native application exclusions match full executable paths, case-insensitively,
@@ -44,4 +44,6 @@ checks are best-effort: HWND reuse within the same process/thread and a change b
 last Win32 check and SendInput are not atomic identity guarantees. SendInput success means
 input was dispatched, not that every application accepted the paste. Clipboard locks fail
 without clearing the existing content. An allocation/publication failure after EmptyClipboard
-may leave marker-only content; previous clipboard values are deliberately not copied for recovery.
+may leave markers and partially published formats; previous clipboard values are deliberately not copied for recovery.
+
+Privacy-rule changes invalidate capture generations and remain pending until the storage worker drains earlier operations and durably saves settings. Obsolete transactions roll back before COMMIT; already-admitted commits may finish before acknowledgement. No old-policy commit finishes after rules are confirmed effective. Existing entries are not retroactively filtered.

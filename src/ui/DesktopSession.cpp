@@ -241,11 +241,11 @@ void DesktopSession::showWindow() {
     window_->requestActivate();
     focusSearch();
 }
-void DesktopSession::replaySelected(bool copyOnly) {
+void DesktopSession::replaySelected(bool copyOnly, bool plainText) {
     if (!history_ || !window_->isVisible() || !window_->isActive()) {
         return;
     }
-    history_->replaySelected(copyOnly);
+    history_->replaySelected(copyOnly, plainText);
 }
 void DesktopSession::pasteRestoredText(quint32 sequence) {
     // A queued restore must not steal focus after the user leaves the palette.

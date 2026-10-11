@@ -7,10 +7,12 @@
 #include <QMutexLocker>
 #include <QThread>
 #include <Windows.h>
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <limits>
 #include <objbase.h>
+#include <vector>
 
 namespace reposco {
 bool isApplicationExcluded(const QString& executable, const QStringList& rules) {
@@ -158,17 +160,21 @@ class NativeClipboardMonitor::Thread final : public QThread {
         wake(kControlMessage);
     }
     bool restoreText(const QString& text, quint64 token) {
-        if (!window_.load() || isInterruptionRequested() || text.isEmpty() ||
-            text.toUtf8().size() > static_cast<qsizetype>(kMaxTextBytes) ||
-            text.contains(QChar::Null)) {
+        return restoreContent(ClipboardContent{text}, token);
+    }
+    bool restoreContent(const ClipboardContent& content, quint64 token) {
+        if (!window_.load() || isInterruptionRequested() || content.payloadBytes() <= 0 ||
+            content.payloadBytes() > kMaxClipboardBytes ||
+            content.text.size() > static_cast<qsizetype>(kMaxTextBytes) ||
+            !content.text.isValidUtf16() || content.text.contains(QChar::Null)) {
             return false;
         }
         {
             const QMutexLocker guard(&restore_mutex_);
-            if (!restore_text_.isEmpty()) {
+            if (restore_content_) {
                 return false;
             }
-            restore_text_ = text;
+            restore_content_ = content;
             restore_token_.store(token);
         }
         wake(kControlMessage);
@@ -195,12 +201,15 @@ class NativeClipboardMonitor::Thread final : public QThread {
             RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing");
         const UINT ignore = RegisterClipboardFormatW(L"Clipboard Viewer Ignore");
         const UINT permission = RegisterClipboardFormatW(L"CanIncludeInClipboardHistory");
-        State state{*this, excluded, ignore, permission};
+        const UINT html = RegisterClipboardFormatW(L"HTML Format");
+        const UINT rtf = RegisterClipboardFormatW(L"Rich Text Format");
+        const UINT png = RegisterClipboardFormatW(L"PNG");
+        State state{*this, excluded, ignore, permission, html, rtf, png};
         const auto window =
             CreateWindowExW(0, L"STATIC", L"Reposco Clipboard Monitor", 0, 0, 0, 0, 0, HWND_MESSAGE,
                             nullptr, GetModuleHandleW(nullptr), nullptr);
         bool listening = false;
-        if (window && excluded && ignore && permission) {
+        if (window && excluded && ignore && permission && html && rtf && png) {
             SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&state));
             SetWindowLongPtrW(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&windowProcedure));
             listening = AddClipboardFormatListener(window) != FALSE;
@@ -241,6 +250,9 @@ class NativeClipboardMonitor::Thread final : public QThread {
         UINT excluded;
         UINT ignore;
         UINT permission;
+        UINT html;
+        UINT rtf;
+        UINT png;
         DWORD lastSequence = 0;
         quint64 generation = 0;
         quint64 token = 0;
@@ -249,70 +261,133 @@ class NativeClipboardMonitor::Thread final : public QThread {
         int attempts = 0;
 
         void restore(HWND window) {
-            QString text;
+            std::optional<ClipboardContent> content;
             quint64 request = 0;
             {
                 const QMutexLocker guard(&thread.restore_mutex_);
-                text.swap(thread.restore_text_);
+                content.swap(thread.restore_content_);
                 request = thread.restore_token_.load();
             }
-            if (text.isEmpty()) {
+            if (!content) {
                 return;
             }
-            bool success = false;
-            DWORD sequence = 0;
-            const auto allocate = [](const void* data, SIZE_T bytes) -> HGLOBAL {
-                const auto handle = GlobalAlloc(GMEM_MOVEABLE, bytes);
-                if (!handle) {
-                    return nullptr;
+            using Allocation = std::unique_ptr<void, decltype(&GlobalFree)>;
+            struct Offered {
+                UINT format;
+                Allocation allocation;
+            };
+            std::vector<Offered> offered;
+            offered.reserve(9);
+            const auto offer = [&offered](UINT format, const void* data, SIZE_T bytes) {
+                Allocation allocation(GlobalAlloc(GMEM_MOVEABLE, bytes), GlobalFree);
+                if (!format || !allocation) {
+                    return false;
                 }
-                auto* destination = GlobalLock(handle);
+                auto* destination = GlobalLock(allocation.get());
                 if (!destination) {
-                    GlobalFree(handle);
-                    return nullptr;
+                    return false;
                 }
                 std::memcpy(destination, data, bytes);
-                GlobalUnlock(handle);
-                return handle;
+                GlobalUnlock(allocation.get());
+                offered.push_back({format, std::move(allocation)});
+                return true;
             };
             constexpr DWORD denied = 0;
             constexpr DWORD marked = 1;
-            auto marker = allocate(&marked, sizeof(marked));
-            auto permissionData = allocate(&denied, sizeof(denied));
-            const auto cloudFormat = RegisterClipboardFormatW(L"CanUploadToCloudClipboard");
-            auto cloudData = allocate(&denied, sizeof(denied));
-            auto payload =
-                allocate(text.utf16(), static_cast<SIZE_T>(text.size() + 1) * sizeof(WCHAR));
-            if (request && marker && permissionData && cloudFormat && cloudData && payload &&
-                OpenClipboard(window)) {
+            const auto cloud = RegisterClipboardFormatW(L"CanUploadToCloudClipboard");
+            bool prepared = offer(excluded, &marked, sizeof(marked)) &&
+                            offer(permission, &denied, sizeof(denied)) &&
+                            offer(cloud, &denied, sizeof(denied));
+            if (prepared && !content->text.isEmpty()) {
+                prepared = offer(CF_UNICODETEXT, content->text.utf16(),
+                                 SIZE_T(content->text.size() + 1) * sizeof(WCHAR));
+            }
+            const std::array<std::pair<UINT, const QByteArray*>, 5> originals = {
+                std::pair{html, &content->html}, std::pair{rtf, &content->rtf},
+                std::pair{png, &content->png}, std::pair{UINT(CF_DIB), &content->dib},
+                std::pair{UINT(CF_DIBV5), &content->dibV5}};
+            for (const auto& [format, bytes] : originals) {
+                if (!prepared || bytes->isEmpty()) {
+                    continue;
+                }
+                if (format == html || format == rtf) {
+                    auto terminated = *bytes;
+                    terminated.append('\0');
+                    prepared = offer(format, terminated.constData(), SIZE_T(terminated.size()));
+                } else {
+                    prepared = offer(format, bytes->constData(), SIZE_T(bytes->size()));
+                }
+            }
+            bool success = false;
+            DWORD sequence = 0;
+            if (request && prepared && OpenClipboard(window)) {
                 if (request == thread.restore_token_.load() && !thread.isInterruptionRequested() &&
                     EmptyClipboard()) {
-                    // Publish exclusion metadata while locked, before making text visible.
-                    if (SetClipboardData(excluded, marker)) {
-                        marker = nullptr;
-                        if (SetClipboardData(permission, permissionData)) {
-                            permissionData = nullptr;
-                            if (SetClipboardData(cloudFormat, cloudData)) {
-                                cloudData = nullptr;
-                                if (SetClipboardData(CF_UNICODETEXT, payload)) {
-                                    payload = nullptr;
-                                    success = true;
-                                }
-                            }
+                    // Readers cannot observe a payload before exclusion metadata is published.
+                    success = true;
+                    for (auto& value : offered) {
+                        if (!SetClipboardData(value.format, value.allocation.get())) {
+                            success = false;
+                            break;
                         }
+                        (void)value.allocation.release();
                     }
-                    sequence = GetClipboardSequenceNumber();
                 }
                 CloseClipboard();
                 sequence = GetClipboardSequenceNumber();
                 success = success && GetClipboardOwner() == window;
             }
-            for (const auto handle : {marker, permissionData, cloudData, payload}) {
-                if (handle) {
-                    GlobalFree(handle);
+            emit thread.monitor_.restored(request, sequence, success);
+        }
+        std::optional<QByteArray> readFormat(UINT format, qsizetype limit, bool terminated) {
+            const auto handle = GetClipboardData(format);
+            const auto size = handle ? GlobalSize(handle) : 0;
+            if (size == 0 || size > SIZE_T(limit)) {
+                return std::nullopt;
+            }
+            const LockedGlobal allocation(handle);
+            if (!allocation.data()) {
+                return std::nullopt;
+            }
+            QByteArray bytes(static_cast<const char*>(allocation.data()), qsizetype(size));
+            if (terminated) {
+                const auto end = bytes.indexOf('\0');
+                if (end >= 0) {
+                    bytes.truncate(end);
                 }
             }
-            emit thread.monitor_.restored(request, sequence, success);
+            return bytes.isEmpty() ? std::nullopt : std::optional(bytes);
+        }
+        std::optional<ClipboardContent> readContent() {
+            NativeTextSource source(excluded, ignore, permission, thread.excludedApplications());
+            const auto captured = captureAllowedText(source);
+            if (captured.decision != TextCaptureDecision::Accepted &&
+                !(captured.decision == TextCaptureDecision::Unsupported &&
+                  !IsClipboardFormatAvailable(CF_UNICODETEXT))) {
+                return std::nullopt;
+            }
+            ClipboardContent content;
+            content.text = QString::fromStdU16String(captured.text);
+            const std::array<std::pair<UINT, QByteArray*>, 5> formats = {
+                std::pair{html, &content.html}, std::pair{rtf, &content.rtf},
+                std::pair{png, &content.png}, std::pair{UINT(CF_DIB), &content.dib},
+                std::pair{UINT(CF_DIBV5), &content.dibV5}};
+            for (const auto& [format, destination] : formats) {
+                if (!IsClipboardFormatAvailable(format)) {
+                    continue;
+                }
+                const bool markup = format == html || format == rtf;
+                auto bytes =
+                    readFormat(format, markup ? kMaxMarkupBytes : kMaxClipboardBytes, markup);
+                if (!bytes) {
+                    return std::nullopt;
+                }
+                *destination = std::move(*bytes);
+                if (content.payloadBytes() > kMaxClipboardBytes) {
+                    return std::nullopt;
+                }
+            }
+            return content.payloadBytes() > 0 ? std::optional(content) : std::nullopt;
         }
         void process(HWND window, bool update) {
             if (generation != thread.generation_.load()) {
@@ -349,11 +424,9 @@ class NativeClipboardMonitor::Thread final : public QThread {
                 }
                 return;
             }
-            TextCapture captured;
+            std::optional<ClipboardContent> captured;
             try {
-                NativeTextSource source(excluded, ignore, permission,
-                                        thread.excludedApplications());
-                captured = captureAllowedText(source);
+                captured = readContent();
             } catch (...) {
                 CloseClipboard();
                 throw;
@@ -365,7 +438,7 @@ class NativeClipboardMonitor::Thread final : public QThread {
                 thread.generation_.load() != generation || thread.isInterruptionRequested()) {
                 return;
             }
-            if (captured.decision == TextCaptureDecision::Accepted) {
+            if (captured) {
                 if (token == std::numeric_limits<quint64>::max()) {
                     emit thread.monitor_.failure(
                         QStringLiteral("Clipboard event sequence exhausted."));
@@ -374,8 +447,13 @@ class NativeClipboardMonitor::Thread final : public QThread {
                 }
                 inFlight = true;
                 ++token;
-                emit thread.monitor_.captured(QString::fromStdU16String(captured.text), token,
-                                              generation);
+                if (captured->html.isEmpty() && captured->rtf.isEmpty() &&
+                    captured->png.isEmpty() && captured->dib.isEmpty() &&
+                    captured->dibV5.isEmpty()) {
+                    emit thread.monitor_.captured(captured->text, token, generation);
+                } else {
+                    emit thread.monitor_.capturedContent(std::move(*captured), token, generation);
+                }
             }
         }
     };
@@ -417,7 +495,7 @@ class NativeClipboardMonitor::Thread final : public QThread {
         }
     }
     QMutex restore_mutex_;
-    QString restore_text_;
+    std::optional<ClipboardContent> restore_content_;
     std::atomic<quint64> restore_token_{0};
     QMutex rules_mutex_;
     QStringList applications_;
@@ -450,6 +528,9 @@ void NativeClipboardMonitor::setExcludedApplications(const QStringList& applicat
 }
 bool NativeClipboardMonitor::restoreText(const QString& text, quint64 token) {
     return thread_->restoreText(text, token);
+}
+bool NativeClipboardMonitor::restoreContent(const ClipboardContent& content, quint64 token) {
+    return thread_->restoreContent(content, token);
 }
 void NativeClipboardMonitor::cancelRestore() {
     thread_->cancelRestore();

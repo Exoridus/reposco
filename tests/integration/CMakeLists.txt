@@ -27,7 +27,7 @@ if(REPOSCO_ISOLATED_CLIPBOARD_TESTS)
     NAME integration.clipboard_isolated
     COMMAND
       native_capture_tests --isolated-clipboard syntheticUpdatesRespectMarkersPauseAndBackpressure
-      exactCodesStayInPrivateClipboardAndOutOfHistory -o -,txt)
+      exactCodesStayInPrivateClipboardAndOutOfHistory richFormatsRoundTripWithoutRecapture -o -,txt)
   set_tests_properties(integration.clipboard_isolated
                        PROPERTIES LABELS "integration;windows;privileged" TIMEOUT 30)
 endif()
@@ -38,3 +38,10 @@ reposco_owned_target(history_flow_tests)
 set_target_properties(history_flow_tests PROPERTIES WIN32_EXECUTABLE FALSE)
 add_test(NAME integration.history_flow COMMAND history_flow_tests -o -,txt)
 set_tests_properties(integration.history_flow PROPERTIES LABELS "integration;windows" TIMEOUT 60)
+
+qt_add_executable(content_tests ContentTests.cpp)
+target_link_libraries(content_tests PRIVATE reposco_storage Qt6::Gui Qt6::Test)
+reposco_owned_target(content_tests)
+set_target_properties(content_tests PROPERTIES WIN32_EXECUTABLE FALSE)
+add_test(NAME integration.content COMMAND content_tests -o -,txt)
+set_tests_properties(integration.content PROPERTIES LABELS "integration;content" TIMEOUT 30)

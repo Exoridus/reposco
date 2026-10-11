@@ -29,7 +29,7 @@ class DesktopSession final : public QObject {
     [[nodiscard]] bool trayAvailable() const;
     [[nodiscard]] unsigned long hotkeyError() const;
     Q_INVOKABLE void showWindow();
-    Q_INVOKABLE void replaySelected(bool copyOnly);
+    Q_INVOKABLE void replaySelected(bool copyOnly, bool plainText = false);
     void toggleWindow();
     void focusSearch();
     [[nodiscard]] const QString& shortcut() const;

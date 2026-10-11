@@ -1,9 +1,11 @@
+#include "ClipboardFixtures.h"
 #include "platform/windows/KeyVault.h"
 #include "platform/windows/NativeClipboardMonitor.h"
 #include "ui/DesktopSession.h"
 #include "ui/HistoryController.h"
 
 #include <QApplication>
+#include <QBuffer>
 #include <QDateTime>
 #include <QDir>
 #include <QLoggingCategory>
@@ -320,6 +322,55 @@ class DesktopTests : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(list->property("count").toInt(), 4, 5000);
         QTRY_VERIFY_WITH_TIMEOUT(history.preview().startsWith("const settings"), 5000);
         snapshot("populated-light");
+        history.setCaptureActive(true);
+        reposco::ClipboardContent rich;
+        rich.text = "Item\tCount\nAlpha\t2";
+        rich.html = reposco::testing::htmlClipboard(
+            "<table><tr><th>Item</th><th>Count</th></tr><tr><td>Alpha</td><td>2</td></tr></table>");
+        emit source->capturedContent(rich, ++token, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(history.model()->rowCount(), 5, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(history.previewKind(), QString("Table"), 5000);
+        snapshot("table-light");
+        session.window()->setProperty("darkMode", true);
+        snapshot("table-dark");
+        rich = {};
+        rich.text = "# Synthetic heading\n\n**Offline preview**\n\n- original content preserved";
+        emit source->capturedContent(rich, ++token, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(history.model()->rowCount(), 6, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!history.darkPreviewImage().isEmpty(), 5000);
+        snapshot("markdown-dark");
+        session.window()->setProperty("darkMode", false);
+        snapshot("markdown-light");
+        rich = {};
+        QImage fixture(120, 72, QImage::Format_ARGB32);
+        fixture.fill(QColor(50, 130, 210));
+        QBuffer buffer(&rich.png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(fixture.save(&buffer, "PNG"));
+        emit source->capturedContent(rich, ++token, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(history.model()->rowCount(), 7, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(history.previewKind(), QString("Image"), 5000);
+        snapshot("image-light");
+        session.window()->setProperty("darkMode", true);
+        auto* previewImage = session.window()->findChild<QQuickItem*>("previewImage");
+        QVERIFY(previewImage);
+        QTest::qWait(200);
+        const auto painted = session.window()->grabWindow();
+        const auto scale = qreal(painted.width()) / session.window()->width();
+        const auto origin = previewImage->mapToScene(QPointF{});
+        const int scanY = int((origin.y() + previewImage->height() / 2) * scale);
+        int visiblePixels = 0;
+        for (int x = int(origin.x() * scale); x < int((origin.x() + previewImage->width()) * scale);
+             ++x) {
+            if (painted.pixelColor(x, scanY) == QColor(50, 130, 210)) {
+                ++visiblePixels;
+            }
+        }
+        QVERIFY2(visiblePixels >= previewImage->property("paintedWidth").toReal() * scale * 0.8,
+                 "Image preview is clipped despite fitting its viewport");
+        snapshot("image-dark");
+        history.setCaptureActive(false);
+        session.window()->setProperty("darkMode", false);
         QMetaObject::invokeMethod(session.window(), "openSettings");
         auto* settings = session.window()->findChild<QQuickWindow*>("settingsWindow");
         QVERIFY(settings);

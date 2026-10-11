@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EncryptedDatabase.h"
-#include "core/TextContent.h"
+#include "content/ClipboardContent.h"
 
 #include <cstdint>
 #include <functional>
@@ -13,6 +13,7 @@ struct HistorySummary {
     QString excerpt;
     std::int64_t copiedAt = 0;
     std::int64_t payloadBytes = 0;
+    QString kind = QStringLiteral("Text");
 };
 struct HistoryLimits {
     std::int64_t maxItems = 1000;
@@ -27,6 +28,10 @@ class HistoryStore final {
     // Rechecks admission before commit; false rolls back payload, recency and eviction.
     [[nodiscard]] bool record(const TextContent& text, std::int64_t copiedAt,
                               const std::function<bool()>& mayCommit);
+    [[nodiscard]] bool record(const NormalizedClipboard& content, std::int64_t copiedAt,
+                              const std::function<bool()>& mayCommit);
+    [[nodiscard]] std::optional<ClipboardContent> content(std::int64_t id,
+                                                          bool boundedPreview = false) const;
     void prune(std::int64_t now);
     void clear();
     void setRetentionDays(int days, std::int64_t now);

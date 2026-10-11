@@ -1,7 +1,10 @@
+#include "ClipboardFixtures.h"
 #include "platform/windows/KeyVault.h"
 #include "platform/windows/NativeClipboardMonitor.h"
 #include "ui/HistoryController.h"
+#include <QBuffer>
 #include <QCoreApplication>
+#include <QImage>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <Windows.h>
@@ -142,6 +145,90 @@ QString readSynthetic(HWND owner) {
 class NativeCaptureTests : public QObject {
     Q_OBJECT
   private slots:
+    void richFormatsRoundTripWithoutRecapture() {
+        if (!isolatedClipboard && !coordinatedClipboard) {
+            QSKIP("Native rich clipboard test requires isolation or explicit coordination");
+        }
+        reposco::NativeClipboardMonitor monitor;
+        QSignalSpy ready(&monitor, &reposco::ClipboardMonitor::ready);
+        QSignalSpy restored(&monitor, &reposco::ClipboardMonitor::restored);
+        QSignalSpy captured(&monitor, &reposco::ClipboardMonitor::capturedContent);
+        QSignalSpy plain(&monitor, &reposco::ClipboardMonitor::captured);
+        monitor.start();
+        QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, 2000);
+        monitor.setActive(true, 1);
+        QTest::qWait(60);
+        reposco::ClipboardContent raw;
+        raw.text = "Synthetic rich clip";
+        raw.rtf = "{\\rtf1\\ansi Synthetic rich clip}";
+        raw.html = reposco::testing::htmlClipboard("<b>Synthetic rich clip</b>");
+        QImage image(3, 2, QImage::Format_ARGB32);
+        image.fill(Qt::blue);
+        QBuffer buffer(&raw.png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly));
+        QVERIFY(image.save(&buffer, "PNG"));
+        QVERIFY(monitor.restoreContent(raw, 42));
+        QTRY_COMPARE_WITH_TIMEOUT(restored.count(), 1, 2000);
+        QVERIFY(restored[0][2].toBool());
+        QTest::qWait(100);
+        QCOMPARE(captured.count(), 0);
+        QCOMPARE(plain.count(), 0);
+        DWORD ownerProcess = 0;
+        GetWindowThreadProcessId(GetClipboardOwner(), &ownerProcess);
+        QCOMPARE(ownerProcess, GetCurrentProcessId());
+        QVERIFY(OpenClipboard(nullptr));
+        const auto read = [](UINT format) {
+            const auto handle = GetClipboardData(format);
+            if (!handle) {
+                return QByteArray{};
+            }
+            const auto bytes = GlobalSize(handle);
+            if (bytes > 1024 * 1024) {
+                return QByteArray{};
+            }
+            const auto* value = static_cast<const char*>(GlobalLock(handle));
+            if (!value) {
+                return QByteArray{};
+            }
+            QByteArray result(value, qsizetype(bytes));
+            GlobalUnlock(handle);
+            return result;
+        };
+        const auto rtf = read(RegisterClipboardFormatW(L"Rich Text Format"));
+        const auto html = read(RegisterClipboardFormatW(L"HTML Format"));
+        const auto png = read(RegisterClipboardFormatW(L"PNG"));
+        const auto marked = IsClipboardFormatAvailable(
+            RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing"));
+        CloseClipboard();
+        QVERIFY(rtf.startsWith(raw.rtf));
+        QVERIFY(png.startsWith(raw.png));
+        QVERIFY(marked);
+        QVERIFY(html.startsWith(raw.html));
+        const std::unique_ptr<std::remove_pointer_t<HWND>, decltype(&DestroyWindow)> owner(
+            CreateWindowExW(0, L"STATIC", L"Synthetic rich owner", 0, 0, 0, 0, 0, HWND_MESSAGE,
+                            nullptr, GetModuleHandleW(nullptr), nullptr),
+            DestroyWindow);
+        QVERIFY(owner);
+        QVERIFY(OpenClipboard(owner.get()));
+        bool wrote = EmptyClipboard() != FALSE;
+        QByteArray textBytes(qsizetype(raw.text.size() + 1) * sizeof(char16_t), '\0');
+        std::memcpy(textBytes.data(), raw.text.utf16(),
+                    std::size_t(raw.text.size()) * sizeof(char16_t));
+        wrote = wrote && setPayload(CF_UNICODETEXT, textBytes) &&
+                setPayload(RegisterClipboardFormatW(L"Rich Text Format"), raw.rtf + '\0') &&
+                setPayload(RegisterClipboardFormatW(L"HTML Format"), raw.html + '\0') &&
+                setPayload(RegisterClipboardFormatW(L"PNG"), raw.png);
+        CloseClipboard();
+        QVERIFY(wrote);
+        QTRY_COMPARE_WITH_TIMEOUT(captured.count(), 1, 2000);
+        const auto received = qvariant_cast<reposco::ClipboardContent>(captured[0][0]);
+        QVERIFY(received.text == raw.text);
+        QVERIFY(received.html == raw.html);
+        QVERIFY(received.rtf == raw.rtf);
+        QVERIFY(received.png.startsWith(raw.png));
+        monitor.acknowledge(captured[0][1].toULongLong());
+        monitor.stop();
+    }
     void exactCodesStayInPrivateClipboardAndOutOfHistory() {
         QVERIFY(isolatedClipboard || coordinatedClipboard);
         QTemporaryDir directory;
@@ -298,7 +385,8 @@ int main(int argc, char* argv[]) {
     IsolatedStation isolation;
     if (argc > 2 && std::strcmp(argv[1], "--coordinated-clipboard") == 0) {
         if (qEnvironmentVariable("REPOSCO_COORDINATED_DESKTOP") != "1" ||
-            std::strcmp(argv[2], "exactCodesStayInPrivateClipboardAndOutOfHistory") != 0) {
+            (std::strcmp(argv[2], "exactCodesStayInPrivateClipboardAndOutOfHistory") != 0 &&
+             std::strcmp(argv[2], "richFormatsRoundTripWithoutRecapture") != 0)) {
             std::cerr << "Coordinated clipboard test requires explicit desktop authorization\n";
             return 2;
         }

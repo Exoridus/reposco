@@ -11,11 +11,15 @@ HistoryController::HistoryController(QString directory, std::unique_ptr<Clipboar
         throw std::invalid_argument("A clipboard monitor is required");
     }
     qRegisterMetaType<HistorySummaries>();
+    qRegisterMetaType<ClipboardContent>();
+    qRegisterMetaType<ContentPreview>();
     connect(monitor_.get(), &ClipboardMonitor::ready, this, [this] {
         monitor_ready_ = true;
         refreshReady();
     });
     connect(monitor_.get(), &ClipboardMonitor::captured, this, &HistoryController::acceptCapture);
+    connect(monitor_.get(), &ClipboardMonitor::capturedContent, this,
+            &HistoryController::acceptContent);
     connect(monitor_.get(), &ClipboardMonitor::failure, this, &HistoryController::failClosed);
     connect(monitor_.get(), &ClipboardMonitor::stopped, this, [this] {
         monitor_stopped_ = true;
@@ -30,7 +34,7 @@ HistoryController::HistoryController(QString directory, std::unique_ptr<Clipboar
                     return;
                 }
                 replay_busy_ = false;
-                setReplayStatus(success ? tr("Copied text")
+                setReplayStatus(success ? tr("Copied content")
                                         : tr("Clipboard unavailable. Try again."));
                 if (success) {
                     emit replayCompleted(sequence, replay_copy_only_);
@@ -56,6 +60,7 @@ void HistoryController::start() {
     connect(&storage_thread_, &QThread::started, worker_, &HistoryWorker::initialize);
     connect(&storage_thread_, &QThread::finished, worker_, &QObject::deleteLater);
     connect(this, &HistoryController::recordRequested, worker_, &HistoryWorker::record);
+    connect(this, &HistoryController::contentRequested, worker_, &HistoryWorker::recordContent);
     connect(this, &HistoryController::preferenceRequested, worker_, &HistoryWorker::setPreference);
     connect(this, &HistoryController::closeRequested, worker_, &HistoryWorker::close);
     connect(this, &HistoryController::policyRequested, worker_, &HistoryWorker::setPolicy);
@@ -66,13 +71,22 @@ void HistoryController::start() {
     connect(this, &HistoryController::previewRequested, worker_, &HistoryWorker::preview);
     connect(this, &HistoryController::replayRequested, worker_, &HistoryWorker::replay);
     connect(worker_, &HistoryWorker::replayReady, this,
-            [this](const QString& text, quint64 revision) {
+            [this](ClipboardContent content, quint64 revision) {
                 replay_pending_ = false;
                 if (revision != replay_revision_ || !replay_busy_) {
                     return;
                 }
-                if (!available_ || stopping_ || clearing_ || locked_ || text.isEmpty() ||
-                    !monitor_->restoreText(text, revision)) {
+                if (replay_plain_text_ && content.text.isEmpty()) {
+                    replay_busy_ = false;
+                    setReplayStatus(
+                        tr("No plain text representation. Choose original copy or paste."));
+                    return;
+                }
+                if (replay_plain_text_) {
+                    content = ClipboardContent{content.text};
+                }
+                if (!available_ || stopping_ || clearing_ || locked_ ||
+                    !monitor_->restoreContent(content, revision)) {
                     replay_busy_ = false;
                     setReplayStatus(tr("Clipboard unavailable. Try again."));
                 }
@@ -90,13 +104,14 @@ void HistoryController::start() {
                 }
             });
     connect(worker_, &HistoryWorker::previewReady, this,
-            [this](const QString& text, quint64 revision) {
+            [this](ContentPreview preview, quint64 revision) {
                 preview_pending_ = false;
                 if (!available_ || stopping_ || clearing_ || locked_) {
                     return;
                 }
                 if (revision == preview_revision_) {
-                    preview_ = text;
+                    preview_content_ = std::move(preview);
+                    preview_ = preview_content_.text;
                     emit previewChanged();
                 } else {
                     requestPreview();
@@ -269,6 +284,9 @@ void HistoryController::failClosed() {
     emit stateChanged();
 }
 void HistoryController::acceptCapture(const QString& text, quint64 token, quint64 generation) {
+    acceptContent(ClipboardContent{text}, token, generation);
+}
+void HistoryController::acceptContent(ClipboardContent content, quint64 token, quint64 generation) {
     if (token <= last_token_ || pending_token_ != 0 || !available_ || !active_ || stopping_ ||
         !gate_->permits(generation)) {
         monitor_->acknowledge(token);
@@ -276,7 +294,12 @@ void HistoryController::acceptCapture(const QString& text, quint64 token, quint6
     }
     last_token_ = token;
     pending_token_ = token;
-    emit recordRequested(text, token, generation);
+    if (content.html.isEmpty() && content.rtf.isEmpty() && content.png.isEmpty() &&
+        content.dib.isEmpty() && content.dibV5.isEmpty()) {
+        emit recordRequested(content.text, token, generation);
+    } else {
+        emit contentRequested(std::move(content), token, generation);
+    }
 }
 int HistoryController::retentionDays() const {
     return retention_days_;
@@ -298,6 +321,21 @@ const QString& HistoryController::searchQuery() const {
 }
 const QString& HistoryController::preview() const {
     return preview_;
+}
+const QString& HistoryController::previewKind() const {
+    return preview_content_.kind;
+}
+const QString& HistoryController::darkPreviewImage() const {
+    return preview_content_.darkImage;
+}
+const QString& HistoryController::lightPreviewImage() const {
+    return preview_content_.lightImage;
+}
+const QVariantList& HistoryController::previewRows() const {
+    return preview_content_.rows;
+}
+bool HistoryController::previewTruncated() const {
+    return preview_content_.truncated;
 }
 void HistoryController::setSearchQuery(const QString& query) {
     const auto bounded = query.left(256);
@@ -350,7 +388,7 @@ void HistoryController::setReplayStatus(const QString& status) {
     replay_status_ = status;
     emit replayChanged();
 }
-void HistoryController::replaySelected(bool copyOnly) {
+void HistoryController::replaySelected(bool copyOnly, bool plainText) {
     if (!available_ || stopping_ || clearing_ || locked_ || selected_id_ <= 0 || replay_busy_ ||
         replay_pending_) {
         return;
@@ -358,7 +396,8 @@ void HistoryController::replaySelected(bool copyOnly) {
     replay_busy_ = true;
     replay_pending_ = true;
     replay_copy_only_ = copyOnly;
-    setReplayStatus(tr("Restoring text..."));
+    replay_plain_text_ = plainText;
+    setReplayStatus(tr("Restoring content..."));
     emit replayRequested(selected_id_, ++replay_revision_);
 }
 void HistoryController::cancelReplay() {
@@ -371,6 +410,7 @@ void HistoryController::cancelReplay() {
 void HistoryController::resetPreview() {
     cancelReplay();
     selected_id_ = 0;
+    preview_content_ = {};
     ++preview_revision_;
     preview_.clear();
     emit previewChanged();

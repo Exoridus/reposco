@@ -15,6 +15,11 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
     bool supportsRestore = false;
     int writes = 0;
     QString restoredText;
+    reposco::ClipboardContent restoredContent;
+    bool restoreContent(const reposco::ClipboardContent& content, quint64 token) override {
+        restoredContent = content;
+        return restoreText(content.text, token);
+    }
     bool restoreText(const QString& text, quint64 token) override {
         if (!supportsRestore) {
             return false;
@@ -43,6 +48,35 @@ class SyntheticMonitor final : public reposco::ClipboardMonitor {
 class HistoryFlowTests : public QObject {
     Q_OBJECT
   private slots:
+    void richCaptureSearchAndReplayKeepOriginalRepresentations() {
+        QTemporaryDir directory;
+        auto monitor = std::make_unique<SyntheticMonitor>();
+        auto* source = monitor.get();
+        source->supportsRestore = true;
+        reposco::HistoryController controller(directory.path(), std::move(monitor));
+        controller.start();
+        QTRY_VERIFY_WITH_TIMEOUT(controller.available(), 5000);
+        controller.setCaptureActive(true);
+        reposco::ClipboardContent raw;
+        raw.text = "Synthetic formatted text";
+        raw.rtf = "{\\rtf1\\ansi Synthetic formatted text}";
+        emit source->capturedContent(raw, 1, source->generation);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        controller.setSearchQuery("formatted");
+        QTRY_COMPARE_WITH_TIMEOUT(controller.model()->rowCount(), 1, 5000);
+        controller.selectRow(0);
+        QTRY_COMPARE_WITH_TIMEOUT(controller.preview(), raw.text, 5000);
+        controller.replaySelected(true);
+        QTRY_COMPARE_WITH_TIMEOUT(source->writes, 1, 5000);
+        QCOMPARE(source->restoredContent.rtf, raw.rtf);
+        QCOMPARE(source->restoredText, raw.text);
+        controller.replaySelected(true, true);
+        QTRY_COMPARE_WITH_TIMEOUT(source->writes, 2, 5000);
+        QVERIFY(source->restoredContent.rtf.isEmpty());
+        QCOMPARE(source->restoredText, raw.text);
+        QCOMPARE(controller.model()->rowCount(), 1);
+        controller.shutdown();
+    }
     void clearDuringPolicyChangeKeepsNewRulesAndStaysPaused() {
         QTemporaryDir directory;
         auto monitor = std::make_unique<SyntheticMonitor>();
@@ -409,5 +443,5 @@ class HistoryFlowTests : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(stopped.count(), 1, 5000);
     }
 };
-QTEST_GUILESS_MAIN(HistoryFlowTests)
+QTEST_MAIN(HistoryFlowTests)
 #include "HistoryFlowTests.moc"

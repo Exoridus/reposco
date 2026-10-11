@@ -1,6 +1,7 @@
 #pragma once
 
 #include "HistoryModel.h"
+#include "content/ContentPreview.h"
 #include "platform/interfaces/ClipboardMonitor.h"
 #include <QPointer>
 #include <QThread>
@@ -17,6 +18,11 @@ class HistoryController final : public QObject {
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     Q_PROPERTY(QString searchQuery READ searchQuery WRITE setSearchQuery NOTIFY searchChanged)
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
+    Q_PROPERTY(QString previewKind READ previewKind NOTIFY previewChanged)
+    Q_PROPERTY(QString darkPreviewImage READ darkPreviewImage NOTIFY previewChanged)
+    Q_PROPERTY(QString lightPreviewImage READ lightPreviewImage NOTIFY previewChanged)
+    Q_PROPERTY(QVariantList previewRows READ previewRows NOTIFY previewChanged)
+    Q_PROPERTY(bool previewTruncated READ previewTruncated NOTIFY previewChanged)
     Q_PROPERTY(bool replayBusy READ replayBusy NOTIFY replayChanged)
     Q_PROPERTY(QString replayStatus READ replayStatus NOTIFY replayChanged)
     Q_PROPERTY(int retentionDays READ retentionDays NOTIFY stateChanged)
@@ -48,6 +54,11 @@ class HistoryController final : public QObject {
     Q_INVOKABLE void clearHistory(bool confirmed);
     [[nodiscard]] const QString& searchQuery() const;
     [[nodiscard]] const QString& preview() const;
+    [[nodiscard]] const QString& previewKind() const;
+    [[nodiscard]] const QString& darkPreviewImage() const;
+    [[nodiscard]] const QString& lightPreviewImage() const;
+    [[nodiscard]] const QVariantList& previewRows() const;
+    [[nodiscard]] bool previewTruncated() const;
     void setSearchQuery(const QString& query);
     Q_INVOKABLE void selectEntry(qint64 id);
     Q_INVOKABLE void selectRow(int row);
@@ -55,7 +66,7 @@ class HistoryController final : public QObject {
     Q_INVOKABLE void setRetentionDays(int days, bool confirmed);
     [[nodiscard]] bool replayBusy() const;
     [[nodiscard]] const QString& replayStatus() const;
-    Q_INVOKABLE void replaySelected(bool copyOnly);
+    Q_INVOKABLE void replaySelected(bool copyOnly, bool plainText = false);
     void cancelReplay();
     void setReplayStatus(const QString& status);
     void shutdown();
@@ -71,6 +82,7 @@ class HistoryController final : public QObject {
     void previewRequested(qint64 id, quint64 revision);
     void stopped();
     void recordRequested(QString text, quint64 token, quint64 generation);
+    void contentRequested(reposco::ClipboardContent content, quint64 token, quint64 generation);
     void preferenceRequested(bool active);
     void closeRequested();
     void policyRequested(bool sixDigits, bool eightDigits, QStringList applications,
@@ -84,6 +96,7 @@ class HistoryController final : public QObject {
     void failClosed();
     void finishShutdown();
     void acceptCapture(const QString& text, quint64 token, quint64 generation);
+    void acceptContent(reposco::ClipboardContent content, quint64 token, quint64 generation);
     void requestSearch();
     void requestPreview();
     void resetPreview();
@@ -91,6 +104,8 @@ class HistoryController final : public QObject {
     bool replay_busy_ = false;
     bool replay_pending_ = false;
     bool replay_copy_only_ = false;
+    bool replay_plain_text_ = false;
+    ContentPreview preview_content_;
     QString replay_status_;
     QString search_query_;
     QString preview_;

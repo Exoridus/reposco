@@ -1,5 +1,6 @@
 #pragma once
 
+#include "content/ContentPreview.h"
 #include "storage/HistoryStore.h"
 #include <QLockFile>
 #include <QObject>
@@ -25,6 +26,7 @@ class HistoryWorker final : public QObject {
   public slots:
     void initialize();
     void record(const QString& text, quint64 token, quint64 generation);
+    void recordContent(const reposco::ClipboardContent& content, quint64 token, quint64 generation);
     void setPreference(bool active);
     void setPolicy(bool sixDigits, bool eightDigits, const QStringList& applications,
                    quint64 generation = 0);
@@ -45,8 +47,8 @@ class HistoryWorker final : public QObject {
     void policyApplied(quint64 generation, bool sixDigits, bool eightDigits,
                        QStringList applications);
     void searchReady(reposco::HistorySummaries rows, quint64 revision);
-    void previewReady(QString text, quint64 revision);
-    void replayReady(QString text, quint64 revision);
+    void previewReady(reposco::ContentPreview preview, quint64 revision);
+    void replayReady(reposco::ClipboardContent content, quint64 revision);
 
   private:
     void failClosed();

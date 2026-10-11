@@ -11,7 +11,8 @@ class HistoryModel final : public QAbstractListModel {
         EntryIdRole = Qt::UserRole + 1,
         ExcerptRole,
         CopiedAtRole,
-        PayloadBytesRole
+        PayloadBytesRole,
+        KindRole
     };
     using QAbstractListModel::QAbstractListModel;
     [[nodiscard]] int rowCount(const QModelIndex& parent = {}) const override;

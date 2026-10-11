@@ -69,6 +69,11 @@ if(REPOSCO_BUILD_APP)
     PUBLIC Qt6::Core
     PRIVATE reposco_core)
   reposco_owned_target(reposco_text)
+  add_library(reposco_content STATIC src/content/ClipboardContent.cpp
+                                     src/content/ContentPreview.cpp)
+  target_include_directories(reposco_content PUBLIC "${PROJECT_SOURCE_DIR}/src")
+  target_link_libraries(reposco_content PUBLIC reposco_text Qt6::Gui)
+  reposco_owned_target(reposco_content)
   add_subdirectory(src/platform/windows)
   add_subdirectory(src/storage)
   add_subdirectory(src/app)

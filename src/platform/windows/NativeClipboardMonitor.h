@@ -16,6 +16,7 @@ class NativeClipboardMonitor final : public ClipboardMonitor {
     void acknowledge(quint64 token) override;
     void setExcludedApplications(const QStringList& applications) override;
     bool restoreText(const QString& text, quint64 token) override;
+    bool restoreContent(const ClipboardContent& content, quint64 token) override;
     void cancelRestore() override;
     void stop() override;
 

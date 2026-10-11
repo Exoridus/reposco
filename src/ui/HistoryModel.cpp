@@ -18,6 +18,8 @@ QVariant HistoryModel::data(const QModelIndex& index, int role) const {
         return QVariant::fromValue(static_cast<qlonglong>(row.copiedAt));
     case PayloadBytesRole:
         return QVariant::fromValue(static_cast<qlonglong>(row.payloadBytes));
+    case KindRole:
+        return row.kind;
     default:
         return {};
     }
@@ -26,7 +28,8 @@ QHash<int, QByteArray> HistoryModel::roleNames() const {
     return {{EntryIdRole, "entryId"},
             {ExcerptRole, "excerpt"},
             {CopiedAtRole, "copiedAt"},
-            {PayloadBytesRole, "payloadBytes"}};
+            {PayloadBytesRole, "payloadBytes"},
+            {KindRole, "kind"}};
 }
 void HistoryModel::replace(std::vector<HistorySummary> rows) {
     beginResetModel();

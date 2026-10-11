@@ -76,7 +76,7 @@ Window {
                 Layout.fillWidth: true
                 color: root.tokens.foreground
                 font.pixelSize: 13
-                text: qsTr("Capture stores future copied text locally in encrypted history. Windows secret markers and your filters are respected. Unmarked passwords, including browser-extension writes, can still be captured. Starting or resuming does not import the current clipboard.")
+                text: qsTr("Capture stores future copied text, formatted content and supported images locally in encrypted history. Windows secret markers and your filters are respected. Unmarked passwords, including browser-extension writes, can still be captured. Starting or resuming does not import the current clipboard.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }
@@ -212,7 +212,7 @@ Window {
                 Layout.fillWidth: true
                 color: root.tokens.secondary
                 font.pixelSize: 12
-                text: qsTr("Win+Alt+V opens History. Esc closes it. Enter pastes original text, Shift+Enter pastes plain text, and Ctrl+Enter copies only. Appearance choices apply to this session. The surface uses a dependable solid glass-style fallback.")
+                text: qsTr("Win+Alt+V opens History. Esc closes it. Enter pastes original formats, Shift+Enter pastes plain text, and Ctrl+Enter copies only. Appearance choices apply to this session. The surface uses a dependable solid glass-style fallback.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }
@@ -259,7 +259,7 @@ Window {
                 Layout.fillWidth: true
                 color: root.tokens.secondary
                 font.pixelSize: 12
-                text: qsTr("History retains up to 1,000 items, 90 days and 1 GiB of original text. Search shows the latest 100 matches; previews show up to 8,192 characters. Item and byte caps are fixed. Retention is configurable below; reducing it deletes older entries. ASCII search is case-insensitive; other Unicode text matches literally.")
+                text: qsTr("History retains up to 1,000 items, 90 days and 1 GiB of original payload. Search shows the latest 100 matches; previews show up to 8,192 characters. Item and byte caps are fixed. Retention is configurable below; reducing it deletes older entries. ASCII search is case-insensitive; other Unicode text matches literally.")
                 textFormat: Text.PlainText
                 wrapMode: Text.WordWrap
             }

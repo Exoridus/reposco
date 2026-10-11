@@ -14,6 +14,7 @@ ItemDelegate {
     required property double copiedAt
     required property string excerpt
     readonly property bool isUrl: /^https?:\/\//i.test(excerpt)
+    required property string kind
     required property double payloadBytes
     property bool selected: false
     required property StyleTokens tokens
@@ -44,7 +45,7 @@ ItemDelegate {
             Layout.preferredWidth: 18
             color: root.tokens.secondary
             font.pixelSize: 14
-            text: root.isUrl ? "↗" : "T"
+            text: root.kind === "Image" ? "▧" : root.kind === "Table" ? "▦" : root.kind === "Markdown" ? "#" : root.isUrl ? "↗" : "T"
         }
         Text {
             Layout.fillWidth: true
@@ -58,7 +59,7 @@ ItemDelegate {
         Text {
             color: root.tokens.secondary
             font.pixelSize: 11
-            text: (root.isUrl ? qsTr("URL") : qsTr("Text")) + " · " + root.age + " · " + root.byteSize
+            text: (root.isUrl && root.kind === "Text" ? qsTr("URL") : root.kind) + " · " + root.age + " · " + root.byteSize
             textFormat: Text.PlainText
         }
     }
