@@ -1,4 +1,5 @@
 Unicode true
+SetCompressor zlib
 !include "MUI2.nsh"
 !ifndef STAGE_ROOT
   !error "Pass /DSTAGE_ROOT=<validated package staging directory>"
@@ -23,7 +24,7 @@ Section "Reposco"
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateShortcut "$SMPROGRAMS\Reposco.lnk" "$INSTDIR\reposco.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reposco" "DisplayName" "Reposco"
-  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reposco" "UninstallString" '$"$INSTDIR\Uninstall.exe$"'
+  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reposco" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Reposco" "DisplayVersion" "0.1.0-dev"
 SectionEnd
 

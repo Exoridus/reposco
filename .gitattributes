@@ -8,3 +8,4 @@
 *.ico binary
 # Preserve upstream legal texts verbatim, including their original whitespace.
 packaging/licenses/Qt/*.txt whitespace=-blank-at-eol,-blank-at-eof
+packaging/licenses/NSIS.txt whitespace=-blank-at-eol,-blank-at-eof

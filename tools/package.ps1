@@ -18,6 +18,7 @@ if (-not $QtRoot) { $QtRoot = $env:QT_ROOT_DIR }
 $qtLicenses = Join-Path $repoRoot 'packaging/licenses/Qt'
 if (-not (Test-Path $qtLicenses)) { throw 'Qt SDK license texts missing' }
 Copy-Item -LiteralPath $qtLicenses -Destination "$stage/licenses/Qt" -Recurse
+Copy-Item -LiteralPath "$repoRoot/packaging/licenses/NSIS.txt" -Destination "$stage/licenses/NSIS.txt"
 foreach ($notice in @('third_party/openssl/NOTICE', 'third_party/qwindowkit/NOTICE')) {
     if (Test-Path $notice) { Copy-Item -LiteralPath $notice -Destination "$stage/licenses/$(Split-Path (Split-Path $notice -Parent) -Leaf)-NOTICE.txt" }
 }
@@ -43,6 +44,6 @@ $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Host "Package smoke passed. ZIP bytes: $((Get-Item $zip).Length); SHA256: $hash"
 if ($Installer) {
     if (-not (Get-Command makensis.exe -ErrorAction SilentlyContinue)) { throw 'NSIS 3 required for -Installer' }
-    & makensis.exe "/DSTAGE_ROOT=$stage" "/DOUTPUT=$repoRoot/build/Reposco-0.1.0-dev-setup.exe" packaging/reposco.nsi
+    & makensis.exe "/WX" "/DSTAGE_ROOT=$stage" "/DOUTPUT=$repoRoot/build/Reposco-0.1.0-dev-setup.exe" packaging/reposco.nsi
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
 }

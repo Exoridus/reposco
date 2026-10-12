@@ -95,7 +95,8 @@ arbitrary formats, pinning, sync and recovery/export are unavailable. QWindowKit
 requests Acrylic for Quick Paste and Mica for Workspace, with a solid fallback.
 Visible desktop blur still needs interactive validation; sandbox screenshots
 prove the Qt presentation and configured DWM types. Stage A has visual approval;
-release qualification is still in progress.
+release qualification has prepared local packages; outstanding compatibility and desktop
+checks are recorded in the [qualification report](docs/development/release-candidate-validation.md).
 Password-manager compatibility, third-party rich paste destinations and broader
 multi-monitor/DPI behavior still need hands-on validation.
 

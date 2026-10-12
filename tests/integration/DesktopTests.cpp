@@ -9,6 +9,7 @@
 #include <QBuffer>
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QLoggingCategory>
 #include <QPainter>
@@ -499,10 +500,16 @@ class DesktopTests : public QObject {
             for (const auto key : {VK_LWIN, VK_RWIN, VK_MENU, VK_CONTROL, VK_SHIFT}) {
                 QVERIFY((GetAsyncKeyState(key) & 0x8000) == 0);
             }
+            QSignalSpy frames(session.window(), &QQuickWindow::frameSwapped);
+            QElapsedTimer activation;
+            activation.start();
             QVERIFY(sendShortcut());
             QTRY_VERIFY_WITH_TIMEOUT(session.window()->isVisible(), 3000);
             QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), nativeHandle(session.window()), 3000);
             QTRY_VERIFY_WITH_TIMEOUT(search->hasActiveFocus(), 3000);
+            QTRY_VERIFY_WITH_TIMEOUT(frames.count() > 0, 3000);
+            qInfo("Synthetic hotkey activation observed: %.3f ms",
+                  static_cast<double>(activation.nsecsElapsed()) / 1000000.0);
             QTest::qWait(500);
             QVERIFY(session.window()->isVisible());
             QVERIFY(session.trayAvailable());
@@ -557,7 +564,8 @@ class DesktopTests : public QObject {
             QSKIP("Requires a currently coordinated interactive desktop.");
         }
         QTemporaryDir directory;
-        const auto original = QString("Synthetic replay\r\nSpacing  preserved  ");
+        const auto original =
+            QString::fromUtf8("Synthetic replay\r\nGrüße 日本語\r\nSpacing  preserved  ");
         {
             const auto key = reposco::loadDatabaseKey(directory.path(), false);
             reposco::HistoryStore store(directory.filePath("history.db").toStdString(),

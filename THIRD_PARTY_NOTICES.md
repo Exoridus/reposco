@@ -11,6 +11,7 @@ Exact recursive source revisions and license files are recorded in [the dependen
 | OpenSSL | 3.5.9 | Apache-2.0 | Static crypto |
 | qmsetup and syscmdline | Manifest revisions | MIT | Build-time only |
 | Strawberry Perl | 5.40.5.1 | Perl Artistic/GPL; bundled tools have their own terms | Build-time only |
+| NSIS | 3.13 qualification compiler | Zlib for installer runtime and zlib compression; optional compiler components have additional terms | Installer runtime; compiler is build-time only |
 
 Apache-2.0 and BSD terms are compatible with GPL-3.0-or-later distribution; see the [Apache compatibility explanation](https://www.apache.org/licenses/GPL-compatibility). Retain upstream copyright, license and NOTICE files where supplied. This is an engineering license inventory, not a legal audit.
 
