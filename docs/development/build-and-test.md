@@ -56,3 +56,5 @@ For native capture/OTP/self-write checks, native_capture_tests accepts
 with that environment flag. This deliberately overwrites the interactive
 clipboard with synthetic values; it never saves/readbacks the previous clipboard.
 The flag is not set by dev.ps1 or CI. Isolated tests never fall back to this mode.
+
+Use `build/windows-debug/reposco.exe --quick` for Quick Paste and `--show` for History Workspace. The tray opens Workspace; Win+Alt+V opens Quick Paste. [Stage A visual review](stage-a-visual-review.md) records actual two-scale screenshots, material limitations and sandbox-blocked checks.

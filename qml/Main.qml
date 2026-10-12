@@ -1,7 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls.Basic
 import QtQuick.Layouts
 import Reposco
 import "components"
@@ -13,30 +12,32 @@ Window {
     property var desktopSession: null
     property HistoryController historyController: null
     property alias reducedMotion: paletteStyle.reducedMotion
+    readonly property string selectedExcerpt: historyList.selectedSlot ? historyList.selectedSlot.excerpt : ""
+    readonly property string selectedKind: historyList.selectedSlot ? historyList.selectedSlot.kind : "Text"
 
-    function confirmClearHistory() {
-        openSettings();
-        settings.confirmingClear = true;
+    function expandHistory() {
+        if (desktopSession)
+            desktopSession.showWorkspace();
+    }
+    function focusCurrentView() {
+        search.forceActiveFocus();
     }
     function moveSelection(delta) {
-        if (historyList.count > 0) {
-            historyList.currentIndex = Math.max(0, Math.min(historyList.count - 1, historyList.currentIndex + delta));
-            historyList.positionViewAtIndex(historyList.currentIndex, ListView.Contain);
-        }
+        historyList.moveSelection(delta);
     }
     function openSettings() {
-        settings.show();
-        settings.raise();
-        settings.requestActivate();
+        if (desktopSession)
+            desktopSession.showSettings();
     }
 
     color: "transparent"
-    height: historyList.count > 0 ? 308 + Math.min(4, historyList.count) * 38 : 310
-    minimumHeight: 280
-    minimumWidth: 440
+    flags: Qt.Tool | Qt.FramelessWindowHint
+    height: 334
+    minimumHeight: Math.min(250, Screen.desktopAvailableHeight - 32)
+    minimumWidth: Math.min(440, Screen.desktopAvailableWidth - 32)
     title: qsTr("Reposco")
     visible: false
-    width: 680
+    width: 600
 
     onClosing: function (close) {
         close.accepted = false;
@@ -45,184 +46,191 @@ Window {
 
     StyleTokens {
         id: paletteStyle
-    }
-    SettingsWindow {
-        id: settings
 
-        desktopSession: root.desktopSession
-        historyController: root.historyController
-        objectName: "settingsWindow"
-        tokens: paletteStyle
-    }
-    Connections {
-        function onModelReset() {
-            historyList.currentIndex = historyList.count > 0 ? 0 : -1;
-            if (root.historyController)
-                root.historyController.selectRow(historyList.currentIndex);
-        }
-
-        target: root.historyController ? root.historyController.model : null
+        highContrast: root.desktopSession !== null && root.desktopSession.highContrast
+        nativeMaterial: root.desktopSession !== null && root.desktopSession.acrylicActive
+        objectName: "paletteStyle"
+        systemAccent: root.desktopSession ? root.desktopSession.systemAccent : (darkMode ? "#60cdff" : "#005fb8")
+        systemDark: root.desktopSession === null || root.desktopSession.systemDark
+        systemReducedMotion: root.desktopSession !== null && root.desktopSession.systemReducedMotion
     }
     Connections {
         function onSearchChanged() {
-            if (root.historyController)
-                search.text = root.historyController.searchQuery;
-        }
-        function onStateChanged() {
-            if (root.historyController && root.historyController.available)
-                root.historyController.selectRow(historyList.currentIndex);
+            search.text = root.historyController.searchQuery;
         }
 
         target: root.historyController
     }
-    GlassSurface {
+    SoftGlass {
         anchors.fill: parent
+        solidColor: paletteStyle.quickBackground
+        tintColor: paletteStyle.quickTint
         tokens: paletteStyle
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 22
-            spacing: 10
+            spacing: 0
 
             RowLayout {
-                id: titleBar
-
                 Layout.fillWidth: true
-                Layout.preferredHeight: 26
-                objectName: "titleBar"
+                Layout.leftMargin: 16
+                Layout.preferredHeight: 52
+                Layout.rightMargin: 10
                 spacing: 10
 
                 Image {
-                    Layout.preferredHeight: 23
-                    Layout.preferredWidth: 23
+                    Layout.preferredHeight: 20
+                    Layout.preferredWidth: 20
                     fillMode: Image.PreserveAspectFit
+                    mipmap: true
                     source: "qrc:/assets/branding/reposco-icon-primary.png"
                     sourceSize.height: 64
                     sourceSize.width: 64
                 }
-                Image {
-                    Layout.preferredHeight: 23
-                    Layout.preferredWidth: 90
-                    fillMode: Image.PreserveAspectFit
-                    source: paletteStyle.darkMode ? "qrc:/assets/branding/reposco-wordmark-primary.png" : "qrc:/assets/branding/reposco-wordmark-dark.png"
-                }
-                Text {
-                    color: paletteStyle.secondary
-                    font.pixelSize: 12
-                    text: qsTr("History")
-                }
-                Item {
+                PaletteSearch {
+                    id: search
+
                     Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    leadingIcon: false
+                    objectName: "paletteSearch"
+                    tokens: paletteStyle
+                    utilityMode: true
+
+                    Keys.onDownPressed: historyList.moveSelection(1)
+                    Keys.onEnterPressed: function (event) {
+                        if (root.desktopSession)
+                            root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
+                    }
+                    Keys.onReturnPressed: function (event) {
+                        if (root.desktopSession)
+                            root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
+                    }
+                    Keys.onUpPressed: historyList.moveSelection(-1)
+                    onTextChanged: {
+                        if (root.historyController && root.historyController.searchQuery !== text)
+                            root.historyController.searchQuery = text;
+                    }
                 }
-                Text {
-                    color: paletteStyle.secondary
-                    font.pixelSize: 11
-                    text: root.historyController && root.historyController.captureActive ? qsTr("Capturing") : qsTr("Paused")
-                }
-                ActionButton {
-                    objectName: "settingsButton"
-                    padding: 5
-                    text: qsTr("Settings")
+                CaptureStatus {
+                    historyController: root.historyController
                     tokens: paletteStyle
 
                     onClicked: root.openSettings()
                 }
-            }
-            PaletteSearch {
-                id: search
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: 42
-                objectName: "paletteSearch"
-                tokens: paletteStyle
-
-                Keys.onDownPressed: root.moveSelection(1)
-                Keys.onEnterPressed: function (event) {
-                    if (root.desktopSession) {
-                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
-                        event.accepted = true;
-                    }
-                }
-                Keys.onEscapePressed: root.hide()
-                Keys.onReturnPressed: function (event) {
-                    if (root.desktopSession) {
-                        root.desktopSession.replaySelected((event.modifiers & Qt.ControlModifier) !== 0, (event.modifiers & Qt.ShiftModifier) !== 0);
-                        event.accepted = true;
-                    }
-                }
-                Keys.onUpPressed: root.moveSelection(-1)
-                onTextChanged: {
-                    if (root.historyController)
-                        root.historyController.searchQuery = text;
-                }
-            }
-            PreviewPane {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 134
-                imageSource: root.historyController ? (paletteStyle.darkMode ? root.historyController.darkPreviewImage : root.historyController.lightPreviewImage) : ""
-                kind: root.historyController ? root.historyController.previewKind : "Text"
-                preview: root.historyController ? root.historyController.preview : ""
-                rows: root.historyController ? root.historyController.previewRows : []
-                tokens: paletteStyle
-                truncated: root.historyController !== null && root.historyController.previewTruncated
-                visible: historyList.count > 0
-            }
-            ListView {
-                id: historyList
-
-                Layout.fillHeight: true
-                Layout.fillWidth: true
-                clip: true
-                currentIndex: count > 0 ? 0 : -1
-                model: root.historyController ? root.historyController.model : null
-                objectName: "historyList"
-                spacing: 3
-                visible: count > 0
-
-                ScrollBar.vertical: ScrollBar {
-                }
-                delegate: HistorySlot {
-                    required property var entryId
-                    required property int index
-
-                    animate: root.visible
-                    height: 35
-                    selected: historyList.currentIndex === index
+                ActionButton {
+                    Accessible.name: qsTr("Open History Workspace")
+                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 28
+                    flat: true
+                    objectName: "expandButton"
                     tokens: paletteStyle
-                    width: historyList.width
 
-                    onClicked: {
-                        historyList.currentIndex = index;
-                        search.forceActiveFocus();
+                    contentItem: Text {
+                        color: paletteStyle.quickSecondary
+                        font.family: "Segoe Fluent Icons"
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "\uE740"
+                        verticalAlignment: Text.AlignVCenter
                     }
-                }
 
-                onCurrentIndexChanged: {
-                    if (root.historyController)
-                        root.historyController.selectRow(currentIndex);
+                    onClicked: root.expandHistory()
+                }
+                ActionButton {
+                    Accessible.name: qsTr("Open Settings in History Workspace")
+                    Layout.preferredHeight: 28
+                    Layout.preferredWidth: 28
+                    flat: true
+                    objectName: "settingsButton"
+                    tokens: paletteStyle
+
+                    contentItem: Text {
+                        color: paletteStyle.quickSecondary
+                        font.family: "Segoe Fluent Icons"
+                        font.pixelSize: 14
+                        horizontalAlignment: Text.AlignHCenter
+                        text: "\uE713"
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    onClicked: root.openSettings()
                 }
             }
-            EmptyState {
+            Rectangle {
+                Layout.fillWidth: true
+                color: paletteStyle.line
+                implicitHeight: 1
+            }
+            Item {
                 Layout.fillHeight: true
                 Layout.fillWidth: true
-                captureActive: root.historyController !== null && root.historyController.captureActive
-                objectName: "emptyState"
-                searching: search.text.length > 0
-                tokens: paletteStyle
-                visible: historyList.count === 0
+                Layout.margins: 6
 
-                onSettingsRequested: root.openSettings()
+                HistoryStack {
+                    id: historyList
+
+                    anchors.fill: parent
+                    historyController: root.historyController
+                    tokens: paletteStyle
+                    utilityMode: true
+                    visible: count > 0
+
+                    onSelectionRequested: search.forceActiveFocus()
+                }
+                EmptyState {
+                    anchors.fill: parent
+                    captureActive: root.historyController !== null && root.historyController.captureActive
+                    objectName: "emptyState"
+                    searching: search.text.length > 0
+                    tokens: paletteStyle
+                    utilityMode: true
+                    visible: historyList.count === 0
+
+                    onSettingsRequested: root.openSettings()
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                color: paletteStyle.line
+                implicitHeight: 1
             }
             RowLayout {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 20
+                Layout.leftMargin: 16
+                Layout.preferredHeight: 40
+                Layout.rightMargin: 16
+                spacing: 12
 
                 Text {
                     Layout.fillWidth: true
-                    color: paletteStyle.secondary
+                    color: paletteStyle.caution
                     elide: Text.ElideRight
-                    font.pixelSize: 11
-                    text: root.historyController && root.historyController.replayStatus.length > 0 ? root.historyController.replayStatus : qsTr("↑ ↓ Select    Enter Paste    Ctrl+Enter Copy    Esc Close")
+                    font.pixelSize: 12
+                    text: root.historyController ? root.historyController.replayStatus : ""
+                    textFormat: Text.PlainText
+                    visible: text.length > 0
+                }
+                KeyHint {
+                    keyText: "Enter"
+                    label: qsTr("Paste")
+                    tokens: paletteStyle
+                    visible: !root.historyController || root.historyController.replayStatus.length === 0
+                }
+                KeyHint {
+                    keyText: "Shift+Enter"
+                    label: qsTr("Plain")
+                    tokens: paletteStyle
+                    visible: !root.historyController || root.historyController.replayStatus.length === 0
+                }
+                KeyHint {
+                    keyText: "Ctrl+Enter"
+                    label: qsTr("Copy")
+                    tokens: paletteStyle
+                    visible: !root.historyController || root.historyController.replayStatus.length === 0
+                }
+                Item {
+                    Layout.fillWidth: true
                 }
             }
         }
@@ -232,5 +240,11 @@ Window {
         sequence: "Escape"
 
         onActivated: root.hide()
+    }
+    Shortcut {
+        enabled: root.visible && root.active
+        sequence: "Ctrl+,"
+
+        onActivated: root.openSettings()
     }
 }

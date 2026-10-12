@@ -7,6 +7,7 @@ Item {
     property bool captureActive: false
     property bool searching: false
     required property StyleTokens tokens
+    property bool utilityMode: false
 
     signal settingsRequested
 
@@ -16,15 +17,15 @@ Item {
 
         Rectangle {
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredHeight: 44
-            Layout.preferredWidth: 44
+            Layout.preferredHeight: 28
+            Layout.preferredWidth: 28
             border.color: root.tokens.line
             color: root.tokens.raised
-            radius: 13
+            radius: 6
 
             Image {
                 anchors.fill: parent
-                anchors.margins: 7
+                anchors.margins: 3
                 fillMode: Image.PreserveAspectFit
                 source: "qrc:/assets/branding/reposco-icon-primary.png"
                 sourceSize.height: 64
@@ -34,7 +35,8 @@ Item {
         Text {
             Layout.alignment: Qt.AlignHCenter
             color: root.tokens.foreground
-            font.pixelSize: 18
+            font.family: root.utilityMode ? "Segoe UI Variable Text" : "Sitka Subheading"
+            font.pixelSize: root.utilityMode ? 13 : 20
             font.weight: Font.DemiBold
             text: root.searching ? qsTr("No matching history") : qsTr("Nothing saved yet")
         }

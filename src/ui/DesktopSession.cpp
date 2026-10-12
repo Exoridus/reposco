@@ -6,35 +6,41 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
+#include <QStyleHints>
 #include <QTimer>
 #include <QWKQuick/quickwindowagent.h>
 #include <Windows.h>
 #include <array>
+#include <dwmapi.h>
 
 Q_LOGGING_CATEGORY(reposcoLifecycle, "reposco.lifecycle", QtWarningMsg)
 
 namespace reposco {
 DesktopSession::DesktopSession(QObject* parent)
-    : QObject(parent), show_action_(tr("Show Reposco"), this), quit_action_(tr("Quit"), this),
+    : QObject(parent), show_action_(tr("Open History"), this), quit_action_(tr("Quit"), this),
       capture_action_(this), hotkey_(this) {
     show_action_.setObjectName("showAction");
     quit_action_.setObjectName("quitAction");
-    connect(&show_action_, &QAction::triggered, this, &DesktopSession::showWindow);
+    connect(&show_action_, &QAction::triggered, this, &DesktopSession::showWorkspace);
     connect(&quit_action_, &QAction::triggered, this, &DesktopSession::quitRequested);
     connect(&hotkey_, &GlobalHotkey::activated, this, [this] {
         qCInfo(reposcoLifecycle) << "hotkey activation";
         openFromHotkey();
     });
+    connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this,
+            &DesktopSession::updateMaterial);
     connect(&engine_, &QQmlEngine::quit, this, &DesktopSession::quitRequested);
     connect(&tray_, &QSystemTrayIcon::activated, this,
             [this](QSystemTrayIcon::ActivationReason reason) {
                 if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
                     qCInfo(reposcoLifecycle) << "tray activation";
-                    showWindow();
+                    showWorkspace();
                 }
             });
 }
-DesktopSession::~DesktopSession() = default;
+DesktopSession::~DesktopSession() {
+    QCoreApplication::instance()->removeNativeEventFilter(this);
+}
 bool DesktopSession::initialize(HistoryController* history) {
     if (window_) {
         return true;
@@ -42,19 +48,26 @@ bool DesktopSession::initialize(HistoryController* history) {
     engine_.setInitialProperties({{"desktopSession", QVariant::fromValue(this)}});
     history_ = history;
     if (history) {
-        connect(history, &HistoryController::replayInvalidated, this,
-                [this] { ++paste_generation_; });
+        connect(history, &HistoryController::replayInvalidated, this, [this] {
+            ++paste_generation_;
+            replay_origin_.clear();
+        });
         connect(history, &HistoryController::replayCompleted, this,
                 [this](quint32 sequence, bool copyOnly) {
-                    if (!copyOnly) {
-                        pasteRestoredText(sequence);
+                    if (replay_origin_ == window_) {
+                        if (copyOnly) {
+                            window_->hide();
+                        } else {
+                            pasteRestoredText(sequence);
+                        }
                     }
+                    replay_origin_.clear();
                 });
         engine_.setInitialProperties({{"historyController", QVariant::fromValue(history)},
                                       {"desktopSession", QVariant::fromValue(this)}});
         capture_action_.setObjectName("captureAction");
         const auto updateCaptureAction = [this, history] {
-            capture_action_.setEnabled(history->available());
+            capture_action_.setEnabled(history->available() && !history->policyPending());
             capture_action_.setText(history->captureActive()
                                         ? tr("Pause capture")
                                         : tr("Enable / resume in Settings..."));
@@ -64,7 +77,7 @@ bool DesktopSession::initialize(HistoryController* history) {
             if (history->captureActive()) {
                 history->setCaptureActive(false);
             } else {
-                QMetaObject::invokeMethod(window_, "openSettings");
+                showSettings(true);
             }
         });
         updateCaptureAction();
@@ -72,6 +85,7 @@ bool DesktopSession::initialize(HistoryController* history) {
         capture_action_.setEnabled(false);
         capture_action_.setText(tr("Capture unavailable"));
     }
+    QQuickWindow::setDefaultAlphaBuffer(true);
     engine_.loadFromModule("Reposco", "Main");
     if (engine_.rootObjects().isEmpty()) {
         return false;
@@ -82,8 +96,10 @@ bool DesktopSession::initialize(HistoryController* history) {
     }
     connect(window_, &QQuickWindow::visibleChanged, this, [this] {
         qCInfo(reposcoLifecycle) << "palette visible" << window_->isVisible();
-        if (!window_->isVisible() && history_ && history_->replayBusy()) {
-            history_->cancelReplay();
+        if (!window_->isVisible()) {
+            if (history_ && history_->replayBusy() && replay_origin_ == window_) {
+                history_->cancelReplay();
+            }
         }
     });
     connect(window_, &QQuickWindow::activeChanged, this, [this] {
@@ -96,15 +112,59 @@ bool DesktopSession::initialize(HistoryController* history) {
     if (!window_agent_->setup(window_)) {
         return false;
     }
-    window_agent_->setTitleBar(window_->findChild<QQuickItem*>("titleBar"));
-    window_agent_->setHitTestVisible(window_->findChild<QQuickItem*>("settingsButton"), true);
+    // The transient picker is entirely client content; it has no draggable title region.
+    connect(window_, SIGNAL(darkModeChanged()), this, SLOT(updateMaterial()));
+    auto* tokens = window_->findChild<QObject*>("paletteStyle");
+    if (!tokens) {
+        return false;
+    }
+    // Shared tokens must survive until both engine-owned root windows are destroyed.
+    style_tokens_ = tokens;
+    style_tokens_->setParent(&engine_);
+    engine_.setInitialProperties({{"desktopSession", QVariant::fromValue(this)},
+                                  {"historyController", QVariant::fromValue(history)},
+                                  {"tokens", QVariant::fromValue(tokens)}});
+    engine_.loadFromModule("Reposco", "WorkspaceWindow");
+    if (engine_.rootObjects().size() != 2) {
+        return false;
+    }
+    workspace_window_ = qobject_cast<QQuickWindow*>(engine_.rootObjects().constLast());
+    if (!workspace_window_) {
+        return false;
+    }
+    workspace_agent_ = std::make_unique<QWK::QuickWindowAgent>();
+    if (!workspace_agent_->setup(workspace_window_)) {
+        return false;
+    }
+    workspace_agent_->setTitleBar(workspace_window_->findChild<QQuickItem*>("workspaceTitleBar"));
+    for (const auto* name : {"workspaceStatus", "workspaceSettings", "workspaceClose"}) {
+        if (auto* item = workspace_window_->findChild<QQuickItem*>(name)) {
+            workspace_agent_->setHitTestVisible(item, true);
+        }
+    }
+    connect(workspace_window_, &QQuickWindow::visibleChanged, this, [this] {
+        if (!workspace_window_->isVisible() && history_ && history_->replayBusy() &&
+            replay_origin_ == workspace_window_) {
+            history_->cancelReplay();
+        }
+    });
+    for (auto* surface : {window_, workspace_window_}) {
+        connect(surface, &QQuickWindow::heightChanged, this, [this, surface] {
+            if (surface->isVisible()) {
+                fitWindow(surface, false);
+            }
+        });
+    }
+    QCoreApplication::instance()->installNativeEventFilter(this);
+    updateMaterial();
     tray_menu_.addAction(&show_action_);
     auto* settingsAction = tray_menu_.addAction(tr("Settings"));
-    connect(settingsAction, &QAction::triggered, this,
-            [this] { QMetaObject::invokeMethod(window_, "openSettings"); });
+    connect(settingsAction, &QAction::triggered, this, [this] { showSettings(); });
     auto* clearAction = tray_menu_.addAction(tr("Clear history..."));
-    connect(clearAction, &QAction::triggered, this,
-            [this] { QMetaObject::invokeMethod(window_, "confirmClearHistory"); });
+    connect(clearAction, &QAction::triggered, this, [this] {
+        showWorkspace();
+        QMetaObject::invokeMethod(workspace_window_, "confirmClearHistory");
+    });
     tray_menu_.addAction(&capture_action_);
     tray_menu_.addSeparator();
     tray_menu_.addAction(&quit_action_);
@@ -126,6 +186,18 @@ bool DesktopSession::initialize(HistoryController* history) {
                           QSystemTrayIcon::Warning);
     }
     return true;
+}
+QObject* DesktopSession::styleTokens() const {
+    return style_tokens_;
+}
+QQuickWindow* DesktopSession::workspaceWindow() const {
+    return workspace_window_;
+}
+bool DesktopSession::micaActive() const {
+    return mica_active_;
+}
+QColor DesktopSession::systemAccent() const {
+    return QApplication::palette().color(QPalette::Accent);
 }
 QQuickWindow* DesktopSession::window() const {
     return window_;
@@ -171,9 +243,95 @@ bool DesktopSession::setShortcut(const QString& shortcut) {
     emit shortcutChanged();
     return true;
 }
+bool DesktopSession::acrylicActive() const {
+    return acrylic_active_;
+}
+bool DesktopSession::systemDark() const {
+    return QGuiApplication::styleHints()->colorScheme() != Qt::ColorScheme::Light;
+}
+bool DesktopSession::highContrast() const {
+    return high_contrast_;
+}
+bool DesktopSession::systemReducedMotion() const {
+    return system_reduced_motion_;
+}
+bool DesktopSession::acrylicEnabled() const {
+    return acrylic_enabled_;
+}
+void DesktopSession::setAcrylicEnabled(bool enabled) {
+    if (acrylic_enabled_ != enabled) {
+        acrylic_enabled_ = enabled;
+        updateMaterial();
+    }
+}
+void DesktopSession::updateMaterial() {
+    if (!window_agent_ || !window_) {
+        return;
+    }
+    HIGHCONTRASTW contrast{};
+    contrast.cbSize = sizeof(contrast);
+    const bool contrastKnown =
+        SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0);
+    high_contrast_ = !contrastKnown || (contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
+    BOOL animations = FALSE;
+    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animations, 0);
+    system_reduced_motion_ = !animations;
+    DWORD transparency = 0;
+    DWORD size = sizeof(transparency);
+    const auto transparencyResult = RegGetValueW(
+        HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"EnableTransparency", RRF_RT_REG_DWORD, nullptr, &transparency, &size);
+    const bool transparencyEnabled = transparencyResult == ERROR_FILE_NOT_FOUND ||
+                                     (transparencyResult == ERROR_SUCCESS && transparency != 0);
+    const bool permitted = acrylic_enabled_ && !high_contrast_ && transparencyEnabled;
+    const auto apply = [permitted](QQuickWindow* surface, QWK::QuickWindowAgent* agent,
+                                   const QString& attribute, DWM_SYSTEMBACKDROP_TYPE expected) {
+        agent->setWindowAttribute(QStringLiteral("dark-mode"),
+                                  surface->property("darkMode").toBool());
+        const bool requested = agent->setWindowAttribute(attribute, permitted);
+        // QWindowKit reports dispatch, not the DWM HRESULT. Verify the applied backend.
+        // Qt's native window identifier represents HWND on Windows.
+        // NOLINTNEXTLINE(performance-no-int-to-ptr)
+        const auto handle = reinterpret_cast<HWND>(surface->winId());
+        DWM_SYSTEMBACKDROP_TYPE backdrop = DWMSBT_NONE;
+        const auto result =
+            DwmGetWindowAttribute(handle, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+        const bool active = permitted && requested && SUCCEEDED(result) && backdrop == expected;
+        if (!active) {
+            agent->setWindowAttribute(attribute, false);
+        }
+        const DWM_WINDOW_CORNER_PREFERENCE corners = DWMWCP_ROUND;
+        DwmSetWindowAttribute(handle, DWMWA_WINDOW_CORNER_PREFERENCE, &corners, sizeof(corners));
+        return active;
+    };
+    acrylic_active_ = apply(window_, window_agent_.get(), QStringLiteral("acrylic-material"),
+                            DWMSBT_TRANSIENTWINDOW);
+    mica_active_ =
+        workspace_window_ && workspace_agent_ &&
+        apply(workspace_window_, workspace_agent_.get(), QStringLiteral("mica"), DWMSBT_MAINWINDOW);
+    emit materialChanged();
+}
+bool DesktopSession::nativeEventFilter(const QByteArray& eventType, void* message,
+                                       qintptr* result) {
+    Q_UNUSED(result)
+    if (eventType != "windows_generic_MSG" || !message) {
+        return false;
+    }
+    const auto* native = static_cast<MSG*>(message);
+    if ((native->message == WM_SETTINGCHANGE || native->message == WM_THEMECHANGED ||
+         native->message == WM_DWMCOMPOSITIONCHANGED) &&
+        !material_update_pending_) {
+        material_update_pending_ = true;
+        QTimer::singleShot(0, this, [this] {
+            material_update_pending_ = false;
+            updateMaterial();
+        });
+    }
+    return false;
+}
 void DesktopSession::focusSearch() {
-    if (auto* search = window_->findChild<QQuickItem*>("paletteSearch")) {
-        search->forceActiveFocus(Qt::ShortcutFocusReason);
+    QMetaObject::invokeMethod(window_, "focusCurrentView");
+    if (!window_->property("settingsOpen").toBool()) {
         qCInfo(reposcoLifecycle) << "focus search";
     }
 }
@@ -228,23 +386,71 @@ void DesktopSession::showWindow() {
             }
         }
         window_->setScreen(target);
-        const auto geometry = target->availableGeometry();
-        window_->setWidth(qMin(680, geometry.width()));
-        if (window_->height() > geometry.height()) {
-            window_->setHeight(geometry.height());
-        }
-        window_->setPosition(geometry.center() -
-                             QPoint(window_->width() / 2, window_->height() / 2));
+        window_->resize(600, 334);
+        fitWindow(window_, true);
         window_->show();
     }
     window_->raise();
     window_->requestActivate();
     focusSearch();
 }
-void DesktopSession::replaySelected(bool copyOnly, bool plainText) {
-    if (!history_ || !window_->isVisible() || !window_->isActive()) {
+void DesktopSession::fitWindow(QQuickWindow* surface, bool center) {
+    if (!surface || !surface->screen()) {
         return;
     }
+    const auto area = surface->screen()->availableGeometry().adjusted(16, 16, -16, -16);
+    const QSize bounded(qMin(surface->width(), area.width()),
+                        qMin(surface->height(), area.height()));
+    if (surface->size() != bounded) {
+        surface->resize(bounded);
+    }
+    if (center) {
+        surface->setPosition(area.center() - QPoint(surface->width() / 2, surface->height() / 2));
+    } else {
+        surface->setPosition(qBound(area.left(), surface->x(),
+                                    qMax(area.left(), area.right() + 1 - surface->width())),
+                             qBound(area.top(), surface->y(),
+                                    qMax(area.top(), area.bottom() + 1 - surface->height())));
+    }
+}
+void DesktopSession::showWorkspace() {
+    if (!workspace_window_) {
+        return;
+    }
+    window_->hide();
+    const bool opening = !workspace_window_->isVisible();
+    if (opening) {
+        fitWindow(workspace_window_, true);
+        workspace_window_->show();
+    }
+    workspace_window_->raise();
+    workspace_window_->requestActivate();
+    if (opening) {
+        QMetaObject::invokeMethod(workspace_window_, "focusCurrentView");
+    }
+}
+void DesktopSession::showSettings(bool confirmCapture) {
+    showWorkspace();
+    QMetaObject::invokeMethod(workspace_window_, "openSettings");
+    if (confirmCapture) {
+        QMetaObject::invokeMethod(workspace_window_, "confirmCapture");
+    }
+}
+void DesktopSession::copySelected(bool plainText) {
+    if (!history_ || !history_->available() || history_->replayBusy() ||
+        !workspace_window_->isVisible() || !workspace_window_->isActive() ||
+        workspace_window_->property("settingsOpen").toBool()) {
+        return;
+    }
+    replay_origin_ = workspace_window_;
+    history_->replaySelected(true, plainText);
+}
+void DesktopSession::replaySelected(bool copyOnly, bool plainText) {
+    if (!history_ || !history_->available() || history_->replayBusy() || !window_->isVisible() ||
+        !window_->isActive()) {
+        return;
+    }
+    replay_origin_ = window_;
     history_->replaySelected(copyOnly, plainText);
 }
 void DesktopSession::pasteRestoredText(quint32 sequence) {

@@ -1,11 +1,15 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls.Basic
 
 Rectangle {
     id: root
 
+    readonly property bool canShowSource: kind !== "Image" && (rows.length > 0 || imageSource.length > 0)
     property string imageSource: ""
     property string kind: "Text"
+    property string metadata: ""
     property string preview: ""
     property var rows: []
     property bool showSource: false
@@ -14,8 +18,8 @@ Rectangle {
 
     border.color: tokens.line
     border.width: 1
-    color: tokens.raised
-    radius: 12
+    color: tokens.well
+    radius: 6
 
     onImageSourceChanged: showSource = false
     onPreviewChanged: showSource = false
@@ -26,22 +30,62 @@ Rectangle {
         anchors.margins: 14
         anchors.top: parent.top
         color: root.tokens.secondary
-        font.letterSpacing: 1.2
-        font.pixelSize: 10
-        text: qsTr("PREVIEW") + " · " + root.kind + (root.truncated ? qsTr(" · bounded") : "")
+        font.capitalization: Font.SmallCaps
+        font.family: "Sitka Small"
+        font.letterSpacing: 0.6
+        font.pixelSize: 14
+        text: root.kind + (root.truncated ? qsTr(" · bounded") : "")
         textFormat: Text.PlainText
     }
-    ActionButton {
-        anchors.right: parent.right
-        anchors.rightMargin: 10
+    Text {
+        anchors.left: parent.left
+        anchors.leftMargin: 14
         anchors.top: parent.top
-        anchors.topMargin: 5
-        padding: 4
-        text: root.showSource ? qsTr("Preview") : qsTr("Plain text")
-        tokens: root.tokens
-        visible: root.rows.length > 0 || root.imageSource.length > 0
+        anchors.topMargin: 30
+        color: root.tokens.meta
+        font.pixelSize: 12
+        text: root.metadata
+        textFormat: Text.PlainText
+    }
+    Rectangle {
+        anchors.right: parent.right
+        anchors.rightMargin: 12
+        anchors.top: parent.top
+        anchors.topMargin: 10
+        color: root.tokens.hover
+        height: 26
+        radius: 5
+        visible: root.canShowSource
+        width: 126
 
-        onClicked: root.showSource = !root.showSource
+        Row {
+            anchors.fill: parent
+            anchors.margins: 2
+            spacing: 2
+
+            ActionButton {
+                flat: true
+                height: parent.height
+                padding: 2
+                selected: !root.showSource
+                text: qsTr("Rendered")
+                tokens: root.tokens
+                width: 69
+
+                onClicked: root.showSource = false
+            }
+            ActionButton {
+                flat: true
+                height: parent.height
+                padding: 2
+                selected: root.showSource
+                text: qsTr("Plain")
+                tokens: root.tokens
+                width: 51
+
+                onClicked: root.showSource = true
+            }
+        }
     }
     ScrollView {
         id: scroll
@@ -51,7 +95,7 @@ Rectangle {
         anchors.fill: parent
         anchors.leftMargin: 14
         anchors.rightMargin: 14
-        anchors.topMargin: 35
+        anchors.topMargin: 48
         clip: true
         contentHeight: body.implicitHeight
         contentWidth: availableWidth
@@ -72,7 +116,7 @@ Rectangle {
                 padding: 0
                 readOnly: true
                 selectByMouse: true
-                selectedTextColor: root.tokens.foreground
+                selectedTextColor: root.tokens.selectedText
                 selectionColor: root.tokens.selection
                 text: root.preview
                 textFormat: TextEdit.PlainText
@@ -107,10 +151,10 @@ Rectangle {
                         required property int index
                         required property var modelData
 
-                        color: index === 0 ? root.tokens.selection : root.tokens.background
-                        height: 28
+                        color: index === 0 ? root.tokens.selection : index % 2 ? root.tokens.well : "transparent"
+                        height: 30
                         objectName: "previewTableRow" + index
-                        radius: 4
+                        radius: 0
                         width: table.width
 
                         Row {
@@ -122,7 +166,7 @@ Rectangle {
                                 delegate: Text {
                                     required property string modelData
 
-                                    color: root.tokens.foreground
+                                    color: row.index === 0 ? root.tokens.selectedText : root.tokens.foreground
                                     elide: Text.ElideRight
                                     font.pixelSize: 12
                                     height: row.height

@@ -200,6 +200,10 @@ class ContentTests : public QObject {
         QCOMPARE(markdown.kind, QString("Markdown"));
         QVERIFY(markdown.darkImage.startsWith("data:image/png;base64,"));
         QVERIFY(markdown.lightImage.startsWith("data:image/png;base64,"));
+        const auto bitmap = QImage::fromData(QByteArray::fromBase64(
+            markdown.darkImage.sliced(markdown.darkImage.indexOf(',') + 1).toLatin1()));
+        QCOMPARE(bitmap.width(), 420);
+        QVERIFY(bitmap.height() <= 2048);
         QVERIFY(markdown.text.size() <= 8192);
     }
     void boundedImagesKeepPixelsAndSupportSearch() {

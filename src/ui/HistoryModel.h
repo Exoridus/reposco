@@ -20,6 +20,9 @@ class HistoryModel final : public QAbstractListModel {
     [[nodiscard]] QHash<int, QByteArray> roleNames() const override;
     void replace(std::vector<HistorySummary> rows);
 
+  signals:
+    void summariesChanged();
+
   private:
     std::vector<HistorySummary> rows_;
 };

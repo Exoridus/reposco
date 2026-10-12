@@ -1,8 +1,14 @@
 import QtQuick
 
 Rectangle {
-    border.color: "#667d91aa"
+    property bool materialActive: tokens.nativeMaterial
+    property color solidColor: tokens.background
+    property color tintColor: tokens.surfaceTint
+    required property StyleTokens tokens
+
+    antialiasing: true
+    border.color: tokens.line
     border.width: 1
-    color: "#f51b2533"
-    radius: 18
+    color: materialActive && !tokens.highContrast ? tintColor : solidColor
+    radius: 8
 }

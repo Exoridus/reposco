@@ -5,7 +5,8 @@
 
 Reposco is an offline clipboard manager for Windows, built with C++20 and Qt Quick.
 It keeps a searchable, encrypted local history and brings selected content back to
-your application through a compact keyboard-oriented palette.
+your application through Quick Paste, with a persistent History Workspace for
+browsing and rich previews.
 
 **Development preview.** No stable release or independent security audit has been
 published. The current implementation supports bounded text and rich-content
@@ -18,9 +19,9 @@ formats; it does not preserve every Windows clipboard format.
 - Unicode text, supported HTML/RTF and PNG/DIB images, with original-format replay.
 - Search, bounded offline Markdown/image/table previews and a plain-text fallback.
 - Configurable native application exclusions, exact-code filters and retention.
-- A global shortcut, keyboard selection, separate Settings and a tray menu.
+- A global Quick Paste shortcut, a persistent workspace with Settings and a tray menu.
 
-![Reposco history palette with synthetic Markdown, table and text entries](assets/screenshots/reposco-history-dark.png)
+![Reposco History Workspace with synthetic history and text preview](docs/images/stage-a/150/workspace-dark.png)
 
 Actual Qt Quick window at 150% application scaling, populated with synthetic test
 data. This demonstrates the interface, not a password-manager compatibility test.
@@ -28,31 +29,34 @@ data. This demonstrates the interface, not a password-manager compatibility test
 ## Install and run
 
 There is no official download or installer release yet. Build from source using
-the instructions below, then launch the visible palette:
+the instructions below, then launch History Workspace:
 
 ```powershell
 ./build/windows-debug/reposco.exe --show
 ```
 
-Open **Settings** and choose **Enable / resume capture** to opt in. First launch
-starts paused. Closing the palette leaves the tray process running; use the tray
-menu to open it, pause capture or quit. Resume does not import the current clipboard.
+Open **Settings** and choose **Resume...** to opt in. First launch starts paused.
+Closing either window leaves the tray process running. The tray opens Workspace;
+Win+Alt+V opens Quick Paste. Resume does not import the current clipboard.
 
 For a locally staged portable build, run `./build/package-stage/reposco.exe --show`
-after packaging. `--smoke --show` uses temporary storage with capture disabled.
+after packaging. Use `--quick` to open Quick Paste directly. `--smoke --show` uses
+temporary storage with capture disabled.
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
-| Win+Alt+V | Open the palette, when registration succeeds |
+| Win+Alt+V | Open Quick Paste, when registration succeeds |
 | Up / Down | Select a history entry |
-| Enter | Restore supported original formats and request paste |
-| Shift+Enter | Restore plain text and request paste |
-| Ctrl+Enter | Copy supported original formats without pasting |
-| Escape | Hide the palette |
+| Enter | Quick Paste: original-format paste; Workspace: copy |
+| Shift+Enter | Quick Paste: plain-text paste; Workspace: plain-text copy |
+| Ctrl+Enter | Quick Paste: copy supported original formats and dismiss |
+| Escape | Hide Quick Paste; return from Settings to History in Workspace |
 
-Type to search. Image-only entries have no plain-text replay. If the target loses
+Type to search. Expand opens Workspace with the selected entry. Workspace stays
+open when copying and never automatically pastes into another application.
+Image-only entries have no plain-text replay. If the Quick Paste target loses
 focus, is elevated or unavailable, or the clipboard is busy, automatic paste can
 be cancelled; copy and manual paste remain the fallback. Dispatching paste input
 does not guarantee that every destination application accepts it.
@@ -87,14 +91,17 @@ See [Privacy](PRIVACY.md) and the [threat model](docs/security/threat-model.md).
 
 Windows x64 is the supported desktop target. Linux/macOS currently exercise only
 the portable core. Rich formats use conservative size and structure limits;
-arbitrary formats, pinning, sync and recovery/export are unavailable. Native
-backdrop blur is not implemented; the palette uses a legible solid fallback.
+arbitrary formats, pinning, sync and recovery/export are unavailable. QWindowKit
+requests Acrylic for Quick Paste and Mica for Workspace, with a solid fallback.
+Visible desktop blur still needs interactive validation; sandbox screenshots
+prove the Qt presentation and configured DWM types. Stage A awaits visual approval.
 Password-manager compatibility, third-party rich paste destinations and broader
 multi-monitor/DPI behavior still need hands-on validation.
 
 The latest capture/replay scope and actual checks are documented in
-[rich-content validation](docs/development/rich-content-validation.md) and
-[UI/security validation](docs/development/ui-security-recovery-validation.md).
+[rich-content validation](docs/development/rich-content-validation.md),
+[UI/security validation](docs/development/ui-security-recovery-validation.md) and
+[Stage A visual review](docs/development/stage-a-visual-review.md).
 
 ## Build from source
 

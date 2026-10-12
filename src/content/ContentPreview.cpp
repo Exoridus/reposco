@@ -44,7 +44,7 @@ QVariantList tableRows(QTextFrame* frame) {
     return {};
 }
 QString renderDocument(OfflineDocument& document, bool dark, bool& truncated) {
-    document.setTextWidth(580);
+    document.setTextWidth(420);
     document.setDefaultStyleSheet(dark ? "body {color:#e5e9f1;} a {color:#a7c9ff;}"
                                        : "body {color:#202c3c;} a {color:#245a9b;}");
     const auto height = document.size().height();
@@ -52,7 +52,7 @@ QString renderDocument(OfflineDocument& document, bool dark, bool& truncated) {
         return {};
     }
     truncated = truncated || height > 2048;
-    QImage image(580, qMin(2048, int(qMin(height + 1, qreal(2048)))),
+    QImage image(420, qMin(2048, int(qMin(height + 1, qreal(2048)))),
                  QImage::Format_ARGB32_Premultiplied);
     image.fill(Qt::transparent);
     QTextCursor cursor(&document);

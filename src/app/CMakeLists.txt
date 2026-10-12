@@ -19,11 +19,15 @@ target_include_directories(
 target_link_libraries(
   reposco_ui
   PUBLIC Qt6::Quick Qt6::Widgets Qt6::Svg reposco_history
-  PRIVATE QWKQuick)
+  PRIVATE QWKQuick dwmapi)
 reposco_owned_target(reposco_ui)
 set_source_files_properties(../../qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_property(SOURCE ../../qml/SettingsWindow.qml PROPERTY QT_RESOURCE_ALIAS SettingsWindow.qml)
+set_property(SOURCE ../../qml/WorkspaceWindow.qml PROPERTY QT_RESOURCE_ALIAS WorkspaceWindow.qml)
 set(paletteComponents
+    ../../qml/components/HistoryStack.qml
+    ../../qml/components/KeyHint.qml
+    ../../qml/components/CaptureStatus.qml
     ../../qml/components/StyleTokens.qml
     ../../qml/components/GlassSurface.qml
     ../../qml/components/ActionButton.qml
@@ -51,6 +55,7 @@ qt_add_qml_module(
   QML_FILES
   ../../qml/Main.qml
   ../../qml/SettingsWindow.qml
+  ../../qml/WorkspaceWindow.qml
   ${paletteComponents}
   ../../qml/components/SoftGlass.qml)
 if(MSVC)
@@ -61,6 +66,13 @@ if(MSVC)
     "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_SettingsWindow_qml.cpp"
     "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_HistorySlot_qml.cpp"
     "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_GlassSurface_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_PolicySwitch_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_PreviewPane_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_WorkspaceWindow_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_HistoryStack_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_CaptureStatus_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_SoftGlass_qml.cpp"
+    "${CMAKE_CURRENT_BINARY_DIR}/.rcc/qmlcache/reposco_ui___qml_components_PaletteSearch_qml.cpp"
     PROPERTIES COMPILE_OPTIONS /wd4702)
 endif()
 configure_file(reposco.rc.in "${CMAKE_CURRENT_BINARY_DIR}/reposco.rc" @ONLY)

@@ -13,6 +13,13 @@ HistoryController::HistoryController(QString directory, std::unique_ptr<Clipboar
     qRegisterMetaType<HistorySummaries>();
     qRegisterMetaType<ClipboardContent>();
     qRegisterMetaType<ContentPreview>();
+    connect(&model_, &HistoryModel::summariesChanged, this, [this] {
+        if (!available_ || stopping_ || clearing_ || locked_) {
+            return;
+        }
+        const auto row = selectedRow();
+        selectRow(row >= 0 ? row : (model_.rowCount() > 0 ? 0 : -1));
+    });
     connect(monitor_.get(), &ClipboardMonitor::ready, this, [this] {
         monitor_ready_ = true;
         refreshReady();
@@ -354,6 +361,18 @@ void HistoryController::requestSearch() {
         emit searchRequested(search_query_, search_revision_);
     }
 }
+qint64 HistoryController::selectedEntryId() const {
+    return selected_id_;
+}
+int HistoryController::selectedRow() const {
+    for (int row = 0; row < model_.rowCount(); ++row) {
+        if (model_.data(model_.index(row, 0), HistoryModel::EntryIdRole).toLongLong() ==
+            selected_id_) {
+            return row;
+        }
+    }
+    return -1;
+}
 void HistoryController::selectRow(int row) {
     if (row < 0 || row >= model_.rowCount()) {
         resetPreview();
@@ -365,8 +384,9 @@ void HistoryController::selectEntry(qint64 id) {
     if (!available_ || stopping_ || clearing_) {
         return;
     }
-    resetPreview();
+    resetPreview(false);
     selected_id_ = id;
+    emit selectionChanged();
     ++preview_revision_;
     preview_.clear();
     emit previewChanged();
@@ -407,9 +427,12 @@ void HistoryController::cancelReplay() {
     replay_busy_ = false;
     setReplayStatus({});
 }
-void HistoryController::resetPreview() {
+void HistoryController::resetPreview(bool resetSelection) {
     cancelReplay();
-    selected_id_ = 0;
+    if (resetSelection) {
+        selected_id_ = 0;
+        emit selectionChanged();
+    }
     preview_content_ = {};
     ++preview_revision_;
     preview_.clear();

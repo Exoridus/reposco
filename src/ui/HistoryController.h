@@ -17,6 +17,8 @@ class HistoryController final : public QObject {
     QML_UNCREATABLE("Owned by the application")
     Q_PROPERTY(QAbstractListModel* model READ model CONSTANT)
     Q_PROPERTY(QString searchQuery READ searchQuery WRITE setSearchQuery NOTIFY searchChanged)
+    Q_PROPERTY(qint64 selectedEntryId READ selectedEntryId NOTIFY selectionChanged)
+    Q_PROPERTY(int selectedRow READ selectedRow NOTIFY selectionChanged)
     Q_PROPERTY(QString preview READ preview NOTIFY previewChanged)
     Q_PROPERTY(QString previewKind READ previewKind NOTIFY previewChanged)
     Q_PROPERTY(QString darkPreviewImage READ darkPreviewImage NOTIFY previewChanged)
@@ -60,6 +62,8 @@ class HistoryController final : public QObject {
     [[nodiscard]] const QVariantList& previewRows() const;
     [[nodiscard]] bool previewTruncated() const;
     void setSearchQuery(const QString& query);
+    [[nodiscard]] qint64 selectedEntryId() const;
+    [[nodiscard]] int selectedRow() const;
     Q_INVOKABLE void selectEntry(qint64 id);
     Q_INVOKABLE void selectRow(int row);
     [[nodiscard]] int retentionDays() const;
@@ -67,7 +71,7 @@ class HistoryController final : public QObject {
     [[nodiscard]] bool replayBusy() const;
     [[nodiscard]] const QString& replayStatus() const;
     Q_INVOKABLE void replaySelected(bool copyOnly, bool plainText = false);
-    void cancelReplay();
+    Q_INVOKABLE void cancelReplay();
     void setReplayStatus(const QString& status);
     void shutdown();
   signals:
@@ -78,6 +82,7 @@ class HistoryController final : public QObject {
     void stateChanged();
     void searchChanged();
     void previewChanged();
+    void selectionChanged();
     void searchRequested(QString query, quint64 revision);
     void previewRequested(qint64 id, quint64 revision);
     void stopped();
@@ -99,7 +104,7 @@ class HistoryController final : public QObject {
     void acceptContent(reposco::ClipboardContent content, quint64 token, quint64 generation);
     void requestSearch();
     void requestPreview();
-    void resetPreview();
+    void resetPreview(bool resetSelection = true);
     quint64 replay_revision_ = 0;
     bool replay_busy_ = false;
     bool replay_pending_ = false;

@@ -1,0 +1,9 @@
+Fixture: production Main.qml, WorkspaceWindow.qml and components, synthetic summaries and offline previews.
+Storage and capture are unavailable in this rendering-only fixture.
+DWM transient backdrop applied: 1
+DWM main-window backdrop applied: 1
+High Contrast: 0
+Device pixel ratio: 1
+Logical width: 600
+Qt scene and PrintWindow captures do not prove visible desktop blur.
+Unsuffixed captures are foreground screen crops, when available.

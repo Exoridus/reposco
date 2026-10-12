@@ -45,8 +45,10 @@ int main(int argc, char* argv[]) {
     QObject::connect(&history, &reposco::HistoryController::stopped, &application,
                      &QApplication::quit);
     history.start();
-    if (application.arguments().contains("--show") || !session.trayAvailable()) {
+    if (application.arguments().contains("--quick")) {
         session.showWindow();
+    } else if (application.arguments().contains("--show") || !session.trayAvailable()) {
+        session.showWorkspace();
     }
     if (smoke) {
         session.window()->show();
