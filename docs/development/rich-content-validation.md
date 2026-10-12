@@ -9,7 +9,7 @@ The experimental Windows slice preserves Unicode text, registered `HTML Format` 
 - Images: maximum 8192 pixels per dimension and 16 million total pixels. PNG ends at IEND; DIB ends at its validated pixel extent. Allocation padding is not stored. Supported DIB headers are 40/108/124 bytes, 16/24/32-bit RGB or supported bitfields; palettes, RLE and embedded color profiles are rejected.
 - RTF requires an accompanying admitted plain/HTML text representation and balanced groups of depth <=64. Embedded objects, binary data, fields and file tables are rejected. RTF preview is plain text, not a full RTF renderer.
 - Exclusion markers and native executable rules precede payload reads. Exact-code filtering applies to accompanying plain text and derived HTML text before fingerprints, preview, indexing and persistence. No arbitrary password recognition is claimed.
-- Preview fallback: 8192 characters; rendered markup: 32768 characters and 580x2048 pixels; image thumbnails: 960x960; table grid: first 12 rows, 6 columns, 128 characters per cell. Resource loading never delegates to file/network loaders. Rendering uses contrast-safe text colors without altering originals.
+- Preview fallback: 8192 characters; rendered markup: 32768 characters and 420x2048 pixels; image thumbnails: 960x960; table grid: first 12 rows, 6 columns, 128 characters per cell. Resource loading never delegates to file/network loaders. Rendering uses contrast-safe text colors without altering originals.
 
 ## Storage compatibility
 

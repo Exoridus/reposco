@@ -615,6 +615,7 @@ class DesktopTests : public QObject {
             return QString::fromWCharArray(text) == original;
         };
         for (const int mode : {0, 1, 2}) {
+            qInfo("Synthetic replay mode: %d", mode);
             session.showWindow();
             QVERIFY(QTest::qWaitForWindowActive(session.window()));
             session.window()->hide();
@@ -627,13 +628,21 @@ class DesktopTests : public QObject {
             QTRY_COMPARE_WITH_TIMEOUT(GetForegroundWindow(), palette, 3000);
             QTRY_VERIFY_WITH_TIMEOUT(session.window()->isActive(), 3000);
             history.selectRow(0);
-            QTRY_COMPARE_WITH_TIMEOUT(history.preview(), original, 3000);
+            QTRY_VERIFY2_WITH_TIMEOUT(
+                history.preview() == original,
+                qPrintable(QString("Mode %1: rows=%2, queryLength=%3, selected=%4, active=%5")
+                               .arg(mode)
+                               .arg(history.model()->rowCount())
+                               .arg(history.searchQuery().size())
+                               .arg(history.selectedEntryId())
+                               .arg(session.window()->isActive())),
+                3000);
             auto* search = session.window()->findChild<QQuickItem*>("paletteSearch");
             QVERIFY(search);
             QTRY_VERIFY_WITH_TIMEOUT(search->hasActiveFocus(), 3000);
             if (mode == 0) {
                 QVERIFY(sendKeys({VK_CONTROL, VK_RETURN}));
-                QTRY_COMPARE_WITH_TIMEOUT(history.replayStatus(), QString("Copied text"), 3000);
+                QTRY_COMPARE_WITH_TIMEOUT(history.replayStatus(), QString("Copied content"), 3000);
                 QTRY_VERIFY(!session.window()->isVisible());
                 QVERIFY(!hasPastedOriginal());
                 SendMessageW(target, WM_PASTE, 0, 0);

@@ -242,7 +242,9 @@ class NativeCaptureTests : public QObject {
         QSignalSpy captured(source, &reposco::ClipboardMonitor::captured);
         reposco::HistoryController history(directory.path(), std::move(monitor));
         QSignalSpy recorded(&history, &reposco::HistoryController::recordRequested);
-        QSignalSpy reset(history.model(), &QAbstractItemModel::modelReset);
+        auto* model = qobject_cast<reposco::HistoryModel*>(history.model());
+        QVERIFY(model);
+        QSignalSpy summaries(model, &reposco::HistoryModel::summariesChanged);
         history.start();
         QTRY_VERIFY_WITH_TIMEOUT(history.available(), 5000);
         history.setCaptureActive(true);
@@ -251,9 +253,9 @@ class NativeCaptureTests : public QObject {
             const auto expected = recorded.count() + 1;
             QVERIFY(writeSynthetic(owner.get(), text));
             QTRY_COMPARE_WITH_TIMEOUT(recorded.count(), expected, 2000);
-            const auto resets = reset.count();
+            const auto updates = summaries.count();
             history.setSearchQuery(history.searchQuery().isEmpty() ? "123456" : "");
-            QTRY_VERIFY_WITH_TIMEOUT(reset.count() > resets, 2000);
+            QTRY_VERIFY_WITH_TIMEOUT(summaries.count() > updates, 2000);
             QCOMPARE(history.model()->rowCount(), 0);
             QVERIFY(readSynthetic(owner.get()) == text);
         }

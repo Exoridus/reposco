@@ -1,7 +1,11 @@
 # Stage A visual approval: Quick Paste and History Workspace
 
-Stage A is implemented locally for visual inspection. Stage B has not started.
-Commit and push are blocked by this session's Git and connector permissions.
+Stage A was visually approved by the user and integrated on bootstrap at
+`f5740fd1bd0ad402e8d7654b91e969db3e40e77c`. The normal-user
+`dev.ps1 full` integration run passed all eight CTest suites, Debug/Release,
+QML checks, owned C++ analysis and portable package smoke. The earlier sandbox
+results below are retained as historical evidence. Release qualification is
+still in progress; no release or tag has been published.
 
 ## Application surfaces
 
@@ -97,7 +101,7 @@ can also vary when inactive. Disabled transparency, unavailable DWM material and
 High Contrast use the fallback; High Contrast uses the Windows palette.
 Thin Acrylic/Windows Composition was not added, nor were dependencies upgraded.
 
-## Validation
+## Historical sandbox validation
 
 - Debug and Release builds passed with six local jobs.
 - QML lint passed without warnings; formatting and git diff checks passed.
@@ -150,7 +154,8 @@ $env:REPOSCO_VISUAL_OUTPUT = "$PWD/.workspace/visual-review"
 ./build/windows-debug/desktop_tests.exe syntheticPresentationSamples -o -,txt
 ```
 
-Local HEAD and the connector-verified remote bootstrap SHA both remain
+During the original sandbox validation, local HEAD and the connector-verified
+remote bootstrap SHA both remained
 `179240d6fc9c05585be344d5053094bad7e1d9eb`. No Stage A commit or push succeeded. The filesystem denies Git index
 writes, Git transport is offline, and the connector rejected a blob write because
 approval is required while this session's approval policy is never. No protected
@@ -161,4 +166,5 @@ patch is saved at `.workspace/stage-a-two-surfaces/stage-a.patch` for recovery o
 the recorded base. Review and commit the existing working tree from an authorized
 normal shell before pushing bootstrap. No tag or release was published.
 
-Visual approval remains a separate explicit user decision. Stage B must wait.
+The user subsequently approved Stage A visually. Release qualification is a
+separate decision and does not authorize Stage B.

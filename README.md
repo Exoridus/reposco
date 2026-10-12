@@ -94,7 +94,8 @@ the portable core. Rich formats use conservative size and structure limits;
 arbitrary formats, pinning, sync and recovery/export are unavailable. QWindowKit
 requests Acrylic for Quick Paste and Mica for Workspace, with a solid fallback.
 Visible desktop blur still needs interactive validation; sandbox screenshots
-prove the Qt presentation and configured DWM types. Stage A awaits visual approval.
+prove the Qt presentation and configured DWM types. Stage A has visual approval;
+release qualification is still in progress.
 Password-manager compatibility, third-party rich paste destinations and broader
 multi-monitor/DPI behavior still need hands-on validation.
 

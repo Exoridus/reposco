@@ -6,7 +6,7 @@ Use `dev.ps1 format`, `quick`, `full`. SDK-free checks use `tools/quality.ps1 -M
 
 Curated tidy checks cover lifetime, slicing, initialization, performance, modernization, naming and indentation. Qt/Win32 ownership/cast checks are excluded because they cannot model parent-owned QObjects and opaque handles. Suppressions must be local and explain a durable reason.
 
-The generated Main.qml cache alone disables MSVC C4702: Qt 6.12 generated QVariant/QJS casts trigger unreachable-code warnings in Qt headers with the tested newer MSVC. Project-owned C++ retains all configured warnings and /WX.
+Only the Qt-generated QML cache files explicitly listed in src/app/CMakeLists.txt disable MSVC C4702: Qt 6.12 generated QVariant/QJS casts trigger unreachable-code warnings in Qt headers with the tested newer MSVC. Project-owned C++ retains all configured warnings and /WX.
 
 Two native interop exceptions are local: clang-tidy permits recovering a pointer from Win32's integer-sized window userdata, and cppcheck permits freeing synthetic clipboard memory after failed SetClipboardData. Its Windows model assumes unconditional ownership transfer; [Windows transfers ownership only on success](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata).
 
